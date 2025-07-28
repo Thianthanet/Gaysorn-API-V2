@@ -1,0 +1,198 @@
+// This is your complete Prisma schema based on the ER diagram and logic provided
+
+// Prisma Configuration
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Models
+
+model Customer {
+  id        Int      @id @default(autoincrement())
+  name      String   @db.VarChar(255)
+  phone     String?  @unique @db.VarChar(20)
+  nickname  String?  @db.VarChar(20)
+  email     String?  @db.VarChar(50)
+  userId    String?  @unique @db.VarChar(50)
+  role      String?  @default("customer")
+  isDelete  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  unit    Units    @relation(fields: [unitId], references: [id])
+  unitId  Int
+  repairs Repair[] @relation("CustomerUser")
+}
+
+model Technician {
+  id        Int      @id @default(autoincrement())
+  name      String   @db.VarChar(50)
+  phone     String?  @unique @db.VarChar(15)
+  userId    String?  @unique @db.VarChar(50)
+  role      String?  @default("technician")
+  isDelete  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  techBuilds TechBuild[]
+
+  // ❌ ไม่ใส่ fields/references เพราะ userId เป็น nullable
+  assigned  Repair[] @relation("TechnicianAssigned")
+  accepted  Repair[] @relation("TechnicianAccepted")
+  completed Repair[] @relation("TechnicianCompleted")
+}
+
+model Building {
+  id           Int      @id @default(autoincrement())
+  buildingName String?  @db.VarChar(50)
+  groupName    String?  @db.VarChar(50)
+  groupId      String?  @db.VarChar(50)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  companies  Company[]
+  techBuilds TechBuild[]
+  repairs    Repair[]
+}
+
+model Company {
+  id          Int      @id @default(autoincrement())
+  companyName String?  @db.VarChar(50)
+  buildingId  Int
+  isDelete    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  building Building @relation(fields: [buildingId], references: [id])
+  units    Units[]
+  repairs  Repair[]
+}
+
+model Units {
+  id        Int      @id @default(autoincrement())
+  unitName  String?  @db.VarChar(50)
+  companyId Int
+  isDelete  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company   Company    @relation(fields: [companyId], references: [id])
+  customers Customer[]
+  repairs   Repair[]
+}
+
+model TechBuild {
+  id         Int     @id @default(autoincrement())
+  techId     String? @db.VarChar(50)
+  buildingId Int
+
+  technician Technician? @relation(fields: [techId], references: [userId])
+  building   Building    @relation(fields: [buildingId], references: [id])
+}
+
+model RepairChoice {
+  id         Int      @id @default(autoincrement())
+  choiceName String?  @db.Text
+  isDelete   Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  repairs RepairChoiceOnRepair[]
+}
+
+model RepairChoiceOnRepair {
+  repairId       Int
+  repairChoiceId Int
+
+  repair       Repair       @relation(fields: [repairId], references: [id])
+  repairChoice RepairChoice @relation(fields: [repairChoiceId], references: [id])
+
+  @@id([repairId, repairChoiceId])
+}
+
+model Repair {
+  id             Int       @id @default(autoincrement())
+  jobNo          String?   @db.VarChar(50)
+  detail         String?   @db.Text
+  createDate     DateTime  @default(now())
+  acceptDate     DateTime?
+  completeDate   DateTime?
+  preworkDate    DateTime?
+  totalTime      Int?
+  status         String?   @db.VarChar(20)
+  isDraft        Boolean   @default(false) // <--- เพิ่มสำหรับสถานะบันทึกชั่วคราว
+  workStar       Int?
+  actionDetail   String?   @db.Text
+  companyName    String?   @db.VarChar(50)
+  contractorNote String?   @db.VarChar(255)
+
+  ownerId            String? @db.VarChar(50)
+  customerUserId     String? @db.VarChar(50)
+  technicianUserId   String? @db.VarChar(50)
+  techAcceptUserId   String? @db.VarChar(50)
+  techCompleteUserId String? @db.VarChar(50)
+
+  unitId     Int
+  companyId  Int
+  buildingId Int
+  choiceDesc String? @db.VarChar(255)
+
+  customer    Customer?   @relation("CustomerUser", fields: [customerUserId], references: [userId])
+  technician  Technician? @relation("TechnicianAssigned", fields: [technicianUserId], references: [userId])
+  acceptedBy  Technician? @relation("TechnicianAccepted", fields: [techAcceptUserId], references: [userId])
+  completedBy Technician? @relation("TechnicianCompleted", fields: [techCompleteUserId], references: [userId])
+
+  unit     Units    @relation(fields: [unitId], references: [id])
+  company  Company  @relation(fields: [companyId], references: [id])
+  building Building @relation(fields: [buildingId], references: [id])
+
+  choices RepairChoiceOnRepair[]
+  images  Image[]
+}
+
+enum UploadBy {
+  cus
+  tech
+  sign
+}
+
+enum StatusJob {
+  pending
+  in_progress
+  completed
+}
+
+model Image {
+  id       Int      @id @default(autoincrement())
+  createAt DateTime @default(now())
+  url      String   @db.VarChar(255)
+  uploadBy UploadBy
+  repairId Int
+  mark     String?  @db.VarChar(20)
+  isDraft  Boolean? @default(false)
+
+  repair Repair @relation(fields: [repairId], references: [id])
+}
+
+model Admin {
+  id        Int      @id @default(autoincrement())
+  username  String   @db.VarChar(20)
+  password  String   @db.VarChar(20)
+  isDelete  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ContractorNote {
+  id        Int      @id @default(autoincrement())
+  message   String   @db.VarChar(255)
+  isDelete  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

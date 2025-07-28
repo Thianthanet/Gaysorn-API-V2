@@ -1,0 +1,22 @@
+const express = require('express')
+const { createRepair, createRepairChoice, getChoices, getRepairById, getAllRepair, getRepairByTechnician, acceptRepair, getCustomerRepair, getAllCustomerRepairByCompany, getChoicesById, updateChoice, getCompanyRepairCount, getCompanyAllRepair, useChoices } = require('../controllers/job')
+const upload = require('../middlewares/upload')
+const { acceptRepairTech } = require('../controllers/technician')
+const router = express.Router()
+
+router.post('/createRepair', upload.array('images', 5), createRepair)
+router.post('/createRepairChoice', createRepairChoice)
+router.get('/getChoices', getChoices)
+router.get('/getRepairById/:id', getRepairById)
+router.get('/getAllRepair', getAllRepair)
+router.get('/getRepairTechByBuilding/:userId', getRepairByTechnician)
+router.post('/acceptRepair', acceptRepairTech)
+router.get('/getCustomerRepair/:userId', getCustomerRepair)
+router.get('/getRepairByCompany/:userId', getAllCustomerRepairByCompany)
+router.get('/getChoiceById/:id', getChoicesById)
+router.patch('/updateChoice', updateChoice)
+router.get('/getCompanyRepairCount', getCompanyRepairCount)
+router.get('/getCompanyAllRepair/:companyId', getCompanyAllRepair)
+router.patch('/useChoice', useChoices)
+
+module.exports = router

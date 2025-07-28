@@ -1,0 +1,27 @@
+const express = require('express')
+const router = express.Router()
+
+const { createBuilding, createCompany, createCustomer, createTechnician, deleteTechnician, getBuilding, getCompany, getUnits, getUser, getUBC, getTechnician, allCustomer, deleteCustomer, getCustomerById, techUpdateBuilding, updateCustomer, updateTechnician, getTechnicianId, updateBuilding, createUnit } = require('../controllers/user')
+
+router.post('/createBuilding', createBuilding)
+router.post('/createCompany', createCompany)
+router.post('/createUnit', createUnit)
+router.post('/createCustomer', createCustomer)
+router.post('/createTechnician', createTechnician)
+router.delete('/deleteTechnician/:id', deleteTechnician)
+router.get('/getBuilding', getBuilding)
+router.get('/getCompany', getCompany)
+router.get('/getUnits', getUnits)
+router.get('/getUser/:userId', getUser)
+router.get('/getUBC/:unitId', getUBC)
+router.get('/getTech', getTechnician)
+router.get('/allCustomer', allCustomer)
+router.delete('/deleteCustomer/:id', deleteCustomer)
+router.get('/getCustomerById/:id', getCustomerById)
+router.post('/techUpdateBuilding', techUpdateBuilding)
+router.patch('/updateCustomer', updateCustomer)
+router.patch('/updateTechnician', updateTechnician)
+router.get('/getTechnicianById/:id', getTechnicianId)
+router.patch('/updateBuilding', updateBuilding)
+
+module.exports = router

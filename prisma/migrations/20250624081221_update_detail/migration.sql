@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "Repair" ALTER COLUMN "detail" SET DATA TYPE TEXT;

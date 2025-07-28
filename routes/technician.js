@@ -1,0 +1,26 @@
+const express = require('express')
+const { getTechnicianById, completeRepair, createRepairTech, saveDraftRepair, getDraftById, getMyRepairAccept, acceptRepairTech, getRelatedByUnit, getRelatedByCompany, getTechnicianReport, getTechReportById, createContractorNote, getContractor, updateContractor, approveContractor } = require('../controllers/technician')
+const upload = require('../middlewares/upload')
+const { updateTechnician, removeTechBuild } = require('../controllers/user')
+const router = express.Router()
+
+
+router.get('/getTechnician/:userId', getTechnicianById)
+router.post('/completeRepair', upload.array('images', 5), completeRepair)
+router.post('/createRepairTech', upload.array('images', 5), createRepairTech)
+router.post('/draftRepair', upload.array('images', 5), saveDraftRepair)
+router.get('/getDraft/:id', getDraftById)
+router.get('/getMyRepairAccept/:userId', getMyRepairAccept)
+router.post('/acceptRepairTech', acceptRepairTech)
+router.patch('/updateTechnician', updateTechnician)
+router.delete('/removeTechBuild', removeTechBuild)
+router.get('/getRelatedByUnit/:unitName', getRelatedByUnit)
+router.get('/getRelatedByCompany/:companyName', getRelatedByCompany)
+router.get('/getTechnicianReport', getTechnicianReport)
+router.get('/getTechReportById/:userId', getTechReportById)
+router.post('/createContractor', createContractorNote)
+router.get('/getContractor', getContractor)
+router.patch('/updateContractor', updateContractor)
+router.patch('/approveContractor', approveContractor)
+
+module.exports = router
