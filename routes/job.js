@@ -1,5 +1,5 @@
 const express = require('express')
-const { createRepair, createRepairChoice, getChoices, getRepairById, getAllRepair, getRepairByTechnician, acceptRepair, getCustomerRepair, getAllCustomerRepairByCompany, getChoicesById, updateChoice, getCompanyRepairCount, getCompanyAllRepair, useChoices } = require('../controllers/job')
+const { createRepair, createRepairChoice, getChoices, getRepairById, getAllRepair, getRepairByTechnician, acceptRepair, getCustomerRepair, getAllCustomerRepairByCompany, getChoicesById, updateChoice, getCompanyRepairCount, getCompanyAllRepair, useChoices, deleteChoiceFake } = require('../controllers/job')
 const upload = require('../middlewares/upload')
 const { acceptRepairTech } = require('../controllers/technician')
 const router = express.Router()
@@ -18,5 +18,6 @@ router.patch('/updateChoice', updateChoice)
 router.get('/getCompanyRepairCount', getCompanyRepairCount)
 router.get('/getCompanyAllRepair/:companyId', getCompanyAllRepair)
 router.patch('/useChoice', useChoices)
+router.patch('/deleteChoiceFake/:id', deleteChoiceFake)
 
 module.exports = router

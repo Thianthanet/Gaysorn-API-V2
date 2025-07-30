@@ -2594,3 +2594,21 @@ exports.getTechReportById = async (req, res) => {
     }
 };
 
+exports.deleteContractorFake = async (req, res) => {
+    try {
+        const { id } = req.params
+        const contractor = await prisma.contractor.update({
+            where: {
+                id: Number(id)
+            },
+            data: {
+                isDelete: true,
+                fakeDelete: true
+            }
+        })
+        res.json({ message: "Delete contractor success", data: contractor })
+    } catch (error) {
+        console.log(error)
+        res.status(500).json({ message: "Server Error" })
+    }
+}

@@ -671,6 +671,26 @@ exports.getChoicesById = async (req, res) => {
         res.json({ message: "Get choice by Id success", data: choice })
     } catch (error) {
         console.log(error)
+        res.status(500).json({ message: "Server Error" })
+    }
+}
+
+exports.deleteChoiceFake = async (req, res) => {
+    try {
+        const { id } = req.params
+        const choice = await prisma.repairChoice.update({
+            where: {
+                id: Number(id)
+            },
+            data: {
+                isDelete: true,
+                fakeDelete: true
+            }
+        })
+        res.json({ message: "Delete Choice success", data: choice })
+    } catch (error) {
+        console.log(error)
+        res.status(500).json({ message: "Server Error" })
     }
 }
 
