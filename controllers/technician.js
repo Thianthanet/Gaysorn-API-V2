@@ -2769,11 +2769,18 @@ exports.getTechReportById = async (req, res) => {
   }
 };
 
+<<<<<<< HEAD
 
 exports.deleteContractorFake = async (req, res) => {
     try {
         const { id } = req.params
         const contractor = await prisma.contractorNote.update({
+=======
+exports.deleteContractorFake = async (req, res) => {
+    try {
+        const { id } = req.params
+        const contractor = await prisma.contractor.update({
+>>>>>>> 4b7db1c6b7d3f09a54201c6f3fb661487de65354
             where: {
                 id: Number(id)
             },
@@ -2787,4 +2794,8 @@ exports.deleteContractorFake = async (req, res) => {
         console.log(error)
         res.status(500).json({ message: "Server Error" })
     }
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> 4b7db1c6b7d3f09a54201c6f3fb661487de65354
