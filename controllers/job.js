@@ -1523,14 +1523,109 @@ exports.getCompanyRepairCount = async (req, res) => {
 //     }
 // }
 
+
+
+//exports.getCompanyAllRepair = async (req, res) => {
+  //  try {
+    //    const { companyId } = req.params;
+
+      //  const repairs = await prisma.repair.findMany({
+         //   where: {
+           //     companyId: Number(companyId),
+            //    isDraft: false,
+           // },
+           // include: {
+             //   customer: true,
+             //   acceptedBy: true,
+             //   completedBy: true,
+             //   company: true,
+             //   building: true,
+             //   unit: true,
+             //   images: true,
+             //   choices: {
+             //       include: {
+             //           repairChoice: true,
+             //       },
+             //   },
+          //  },
+      //  });
+
+       //  const totalRepairs = repairs.length;
+
+        // นับงานตามสถานะ
+       // let pending = 0;
+      //  let inProgress = 0;
+     //   let completed = 0;
+
+      //  repairs.forEach((job) => {
+        //    if (job.completedBy) {
+          //      completed++;
+          //  } else if (job.acceptedBy) {
+          //      inProgress++;
+          //  } else {
+            //    pending++;
+          //  }
+       // });
+
+      //  const companyData = {
+        //    companyName: repairs[0]?.company?.companyName || null,
+         //   buildingName: repairs[0]?.building?.buildingName || null,
+         //   unitName: repairs[0]?.unit?.unitName || null,
+         //   totalRepairs,
+         //   statusCount: {
+          //      pending,
+          //      inProgress,
+          //      completed,
+          //  },
+          //  statusPercentage: {
+          //      pending: totalRepairs ? ((pending / totalRepairs) * 100).toFixed(2) : 0,
+            //    inProgress: totalRepairs ? ((inProgress / totalRepairs) * 100).toFixed(2) : 0,
+            //    completed: totalRepairs ? ((completed / totalRepairs) * 100).toFixed(2) : 0,
+          //  },
+      //  };
+
+      //  res.json({
+       //     message: "Get repair by worker company success",
+         //   companyData: companyData,
+        //    data: repairs,
+      //  });
+  //  } catch (error) {
+    //    console.log(error);
+      //  res.status(500).json({ message: "Server Error" });
+  //  }
+// };
+
+
 exports.getCompanyAllRepair = async (req, res) => {
     try {
         const { companyId } = req.params;
+        const { startDate, endDate } = req.query; // รับช่วงวันที่จาก query string
+
+        // สร้างเงื่อนไขเวลาถ้าได้รับค่า startDate, endDate
+        let dateFilter = {};
+        if (startDate && endDate) {
+            dateFilter = {
+                gte: new Date(startDate),
+                lte: new Date(endDate),
+            };
+        } else if (startDate) {
+            dateFilter = {
+                gte: new Date(startDate),
+            };
+        } else if (endDate) {
+            dateFilter = {
+                lte: new Date(endDate),
+            };
+        }
 
         const repairs = await prisma.repair.findMany({
             where: {
                 companyId: Number(companyId),
                 isDraft: false,
+                // ถ้ามี dateFilter ให้ใส่ลงในฟิลด์เวลาของ repair เช่น createdAt หรือ reportDate
+                ...(Object.keys(dateFilter).length > 0 && {
+                    createDate: dateFilter,  // เปลี่ยนเป็นฟิลด์วันที่ของคุณ
+                }),
             },
             include: {
                 customer: true,
@@ -1592,3 +1687,22 @@ exports.getCompanyAllRepair = async (req, res) => {
         res.status(500).json({ message: "Server Error" });
     }
 };
+
+exports.deleteChoiceFake = async (req, res) => {
+    try {
+        const { id } = req.params
+        const choice = await prisma.repairChoice.update({
+            where: {
+                id: Number(id)
+            },
+            data: {
+                isDelete: true,
+                fakeDelete: true
+            }
+        })
+        res.json({ message: "Delete Choice success", data: choice })
+    } catch (error) {
+        console.log(error)
+        res.status(500).json({ message: "Server Error" })
+    }
+}

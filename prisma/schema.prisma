@@ -100,6 +100,7 @@ model RepairChoice {
   id         Int      @id @default(autoincrement())
   choiceName String?  @db.Text
   isDelete   Boolean  @default(false)
+  fakeDelete Boolean? @default(false)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -193,6 +194,7 @@ model ContractorNote {
   id        Int      @id @default(autoincrement())
   message   String   @db.VarChar(255)
   isDelete  Boolean  @default(false)
+  fakeDelete Boolean? @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
