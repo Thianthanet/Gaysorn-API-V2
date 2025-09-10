@@ -101,6 +101,10 @@ model RepairChoice {
   choiceName String?  @db.Text
   isDelete   Boolean  @default(false)
   fakeDelete Boolean? @default(false)
+<<<<<<< HEAD
+=======
+  // fakeDelete Boolean  @default(false)
+>>>>>>> 1c4899a7aa0cb1d082fb03f1ec5c8effbeeb5904
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -191,10 +195,19 @@ model Admin {
 }
 
 model ContractorNote {
+<<<<<<< HEAD
   id        Int      @id @default(autoincrement())
   message   String   @db.VarChar(255)
   isDelete  Boolean  @default(false)
   fakeDelete Boolean? @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+=======
+  id         Int      @id @default(autoincrement())
+  message    String   @db.VarChar(255)
+  isDelete   Boolean  @default(false)
+  fakeDelete Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+>>>>>>> 1c4899a7aa0cb1d082fb03f1ec5c8effbeeb5904
 }

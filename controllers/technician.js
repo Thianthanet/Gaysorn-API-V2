@@ -1795,6 +1795,7 @@ exports.completeRepair = async (req, res) => {
         const host = req.get('host')
 
         // สร้าง URL รูปภาพ พร้อม log เพื่อตรวจสอบ
+<<<<<<< HEAD
        // const imageUrls = (req.files || []).map(file => {
            // const url = `${protocol}://${host}/uploads/${file.filename}`
            // console.log("✅ Image URL generated:", url)
@@ -1815,6 +1816,15 @@ exports.completeRepair = async (req, res) => {
           normalImages.push(url)
         }
        }
+
+
+=======
+        const imageUrls = (req.files || []).map(file => {
+            const url = `${protocol}://${host}/uploads/${file.filename}`
+            console.log("✅ Image URL generated:", url)
+            return url
+        })
+>>>>>>> 1c4899a7aa0cb1d082fb03f1ec5c8effbeeb5904
 
 
 
@@ -2888,11 +2898,18 @@ exports.getTechReportById = async (req, res) => {
   }
 };
 
+<<<<<<< HEAD
 
 exports.deleteContractorFake = async (req, res) => {
     try {
         const { id } = req.params
         const contractor = await prisma.contractorNote.update({
+=======
+exports.deleteContractorFake = async (req, res) => {
+    try {
+        const { id } = req.params
+        const contractor = await prisma.contractor.update({
+>>>>>>> 1c4899a7aa0cb1d082fb03f1ec5c8effbeeb5904
             where: {
                 id: Number(id)
             },
