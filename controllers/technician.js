@@ -664,7 +664,16 @@ exports.createRepairTech = async (req, res) => {
         if (customerUserId && customerUserId.trim() !== "") {
             displayCustomerName = customer.name ?? "-"
             displayCustomerPhone = customer.phone ?? "-"
-        }
+        } else if (ownerId && ownerId.trim() !== "") {
+	    const tech = await prisma.technician.findFirst({
+	     where: {userId: ownerId.trim() }
+	   })
+	   
+	  if (tech) {
+	    displayCustomerName = tech.name ?? "-"
+	    displayCustomerPhone = tech.phone ?? "-"
+	 }
+	}
 
         // ✅ Generate Job Number
         // const newJobNo = await generateJobNo();
@@ -798,7 +807,7 @@ exports.createRepairTech = async (req, res) => {
                             type: "box",
                             layout: "baseline",
                             contents: [
-                                { type: "text", text: `สถานที่ :`, size: "sm", flex: 2 },
+                                { type: "text", text: `อาคาร :`, size: "sm", flex: 2 },
                                 { type: "text", text: `${building.buildingName}, ${unit.unitName}`, size: "sm", wrap: true, flex: 4 },
                             ]
                         },
@@ -1356,8 +1365,21 @@ exports.getDraftById = async (req, res) => {
         res.json({ message: "Get draft by id success", data: draft });
     } catch (error) {
         console.log(error);
-        res.status(500).json({ message: "Server Error" });
+       res.status(500).json({ message: "Server Error" });
     }
+
+//  if (!draft || !Array.isArray(draft.images)) {  // ต้องมี {} ครอบ if
+//    draft.images = [];
+//  } else {
+//    draft.images = draft.images.filter(img => !img.url.includes('signature'));
+//  }
+
+//  res.json({ message: "Get draft by id success", data: draft });
+//} catch (error) {
+//  console.log(error);
+//  res.status(500).json({ message: "Server Error" });
+
+
 };
 
 
@@ -1399,6 +1421,35 @@ exports.getMyRepairAccept = async (req, res) => {
                 },
             },
         });
+
+        const result = [];
+        for (const repair of repairs) {
+            let owner = null;
+
+            // หาใน customer ก่อน
+            owner = await prisma.customer.findUnique({
+                where: { userId: repair.ownerId || "" },
+                select: { id: true, name: true, phone: true, userId: true }
+            });
+
+            // ถ้าไม่ใช่ customer → หาใน technician
+            if (!owner) {
+                owner = await prisma.technician.findUnique({
+                    where: { userId: repair.ownerId || "" },
+                    select: { id: true, name: true, phone: true, userId: true }
+                });
+            }
+
+            result.push({
+                ...repair,
+                owner: owner ? {
+                    id: owner.id,
+                    name: owner.name,
+                    phone: owner.phone,
+                    userId: owner.userId
+                } : null
+            });
+        }
 
         res.json({ message: "Get my repair success", data: repair });
     } catch (error) {
@@ -1456,11 +1507,15 @@ exports.acceptRepairTech = async (req, res) => {
                     include: {
                         building: true
                     }
-                }
+                },
+		building: true,
+		unit: true
             }
         })
 
         const companyName = updateRepair.company?.companyName || "ไม่ทราบชื่อบริษัท"
+	const buildingName = updateRepair.building?.buildingName || "ไม่ทรายอาคาร"
+	const unitName = updateRepair.unit?.unitName || "ไม่ทราบยูนิต"
         const groupId = updateRepair.company?.building?.groupId
 
         const webDetail = `${process.env.WEB_BASE_URL}/complete/${updateRepair.id}`
@@ -1525,6 +1580,14 @@ exports.acceptRepairTech = async (req, res) => {
                             contents: [
                                 { type: "text", text: `บริษัท :`, size: "sm", flex: 2 },
                                 { type: "text", text: `${companyName}`, size: "sm", wrap: true, flex: 4 },
+                            ]
+                        },
+			 {
+                            type: "box",
+                            layout: "baseline",
+                            contents: [
+                                { type: "text", text: `อาคาร :`, size: "sm", flex: 2 },
+                                { type: "text", text: `${buildingName}, ${unitName}`, size: "sm", wrap: true, flex: 4 },
                             ]
                         },
                         {
@@ -1724,10 +1787,36 @@ exports.completeRepair = async (req, res) => {
     try {
         const { id, actionDetail, workStar, techCompleteUserId } = req.body
 
-        const protocol = req.headers['x-forwarded-proto'] || req.protocol
-        const imageUrls = (req.files || []).map(file => {
-            return `${protocol}://${req.get('host')}/uploads/${file.filename}`
-        })
+       // const protocol = req.headers['x-forwarded-proto'] || req.protocol
+       // const imageUrls = (req.files || []).map(file => {
+       //     return `${protocol}://${req.get('host')}/api/uploads/${file.filename}`
+       // })
+        const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https'
+        const host = req.get('host')
+
+        // สร้าง URL รูปภาพ พร้อม log เพื่อตรวจสอบ
+       // const imageUrls = (req.files || []).map(file => {
+           // const url = `${protocol}://${host}/uploads/${file.filename}`
+           // console.log("✅ Image URL generated:", url)
+         //   return url
+       // })
+
+	// ✅ แยกรูปงานกับลายเซ็น
+        let normalImages = []
+        let signatureImage = null
+
+        for (const file of req.files || []) {
+          const url = `${protocol}://${host}/uploads/${file.filename}`
+          console.log("✅ Image URL generated:", url)
+
+        if (file.filename.toLowerCase().includes("signature")) {
+            signatureImage = url
+        } else {
+          normalImages.push(url)
+        }
+       }
+
+
 
         const repair = await prisma.repair.findFirst({
             where: { id: Number(id) },
@@ -1757,12 +1846,18 @@ exports.completeRepair = async (req, res) => {
                 actionDetail,
                 workStar: Number(workStar),
                 techCompleteUserId,
-                images: {
-                    create: imageUrls.map(url => ({
-                        url,
-                        uploadBy: 'tech'
-                    }))
-                }
+               // images: {
+                 //   create: imageUrls.map(url => ({
+                   //     url,
+                     //   uploadBy: 'tech'
+                   // }))
+               // }
+		images: {
+                   create: [...normalImages, signatureImage].filter(Boolean).map(url => ({
+                    url,
+                  uploadBy: 'tech'
+                 }))
+               }
             }
         })
 
@@ -1799,6 +1894,23 @@ exports.completeRepair = async (req, res) => {
                 ? prisma.technician.findUnique({ where: { userId: fullRepair.techCompleteUserId } })
                 : null
         ])
+
+	let reporterName = "-"
+	let reporterPhone = "-"
+
+	if (fullRepair.customer) {
+          reporterName = fullRepair.customer.name || "-"
+	  reporterPhone = fullRepair.customer.phone || "-"
+	} else if (fullRepair.ownerId) {
+	 const ownerTech = await prisma.technician.findFirst({
+	  where: { userId: fullRepair.ownerId }
+	})
+	 if (ownerTech) {
+ 	  reporterName = ownerTech.name || "-"
+	  reporterPhone = ownerTech.phone || "-"
+	}
+
+	}
 
         // let technicianText = ""
         // if (
@@ -1849,6 +1961,33 @@ exports.completeRepair = async (req, res) => {
                 }
             )
         }
+
+
+		const buildImageContents = () => [
+		      ...(normalImages.length > 0
+       			 ? normalImages.map(url => ({
+           		 type: "image",
+           		 url,
+           		 size: "full",
+          		  aspectRatio: "16:9",
+           		 aspectMode: "cover",
+           		 margin: "md"
+         		 }))
+       		 : []),
+     		 ...(signatureImage
+       		 ? [
+           		 { type: "text", text: "ลายเซ็น", size: "sm", margin: "md" },
+           	 {
+             		 type: "image",
+             		 url: signatureImage,
+             		 size: "full",
+             		 aspectRatio: "16:9",
+             		 aspectMode: "cover",
+             		 margin: "md"
+           	 }
+         	 ]
+       		 : [])
+   		 ]
 
         const messageToCustomer = {
             type: "flex",
@@ -1938,33 +2077,35 @@ exports.completeRepair = async (req, res) => {
                         //     }))
                         //     : [])
 
-                        ...(imageUrls.length > 0
-                            ? [
-                                ...imageUrls.slice(0, -1).map(url => ({
-                                    type: "image",
-                                    url,
-                                    size: "full",
-                                    aspectRatio: "16:9",
-                                    aspectMode: "cover",
-                                    margin: "md"
-                                })),
-                                {
-                                    type: "text",
-                                    text: "ลายเซ็น",
-                                    size: "sm",
+                       // ...(imageUrls.length > 0
+                         //   ? [
+                           //     ...imageUrls.slice(0, -1).map(url => ({
+                             //       type: "image",
+                               //     url,
+                                 //   size: "full",
+                                 //   aspectRatio: "16:9",
+                                //    aspectMode: "cover",
+                                 //   margin: "md"
+                              //  })),
+                              //  {
+                                //    type: "text",
+                                //    text: "ลายเซ็น",
+                                //    size: "sm",
                                     // weight: "bold",
-                                    margin: "md"
-                                },
-                                {
-                                    type: "image",
-                                    url: imageUrls[imageUrls.length - 1],
-                                    size: "full",
-                                    aspectRatio: "16:9",
-                                    aspectMode: "cover",
-                                    margin: "md"
-                                }
-                            ]
-                            : [])
+                                //    margin: "md"
+                              //  },
+                              //  {
+                                //    type: "image",
+                                //    url: imageUrls[imageUrls.length - 1],
+                                //    size: "full",
+                                //    aspectRatio: "16:9",
+                                //    aspectMode: "cover",
+                               //     margin: "md"
+                              //  }
+                          //  ]
+                         //   : [])
+			
+			...buildImageContents()
 
                     ]
                 }
@@ -2049,7 +2190,7 @@ exports.completeRepair = async (req, res) => {
                             layout: "baseline",
                             contents: [
                                 { type: "text", text: `ผู้แจ้ง :`, size: "sm", flex: 2 },
-                                { type: "text", text: `${fullRepair.customer?.name || "-"} (${fullRepair.customer?.phone || "-"})`, size: "sm", wrap: true, flex: 4 },
+                                { type: "text", text: `${reporterName || "-"} (${reporterPhone || "-"})`, size: "sm", wrap: true, flex: 4 },
                             ]
                         },
                         // {
@@ -2087,33 +2228,35 @@ exports.completeRepair = async (req, res) => {
                         //     }))
                         //     : [])
 
-                        ...(imageUrls.length > 0
-                            ? [
-                                ...imageUrls.slice(0, -1).map(url => ({
-                                    type: "image",
-                                    url,
-                                    size: "full",
-                                    aspectRatio: "16:9",
-                                    aspectMode: "cover",
-                                    margin: "md"
-                                })),
-                                {
-                                    type: "text",
-                                    text: "ลายเซ็น",
-                                    size: "sm",
+                       // ...(imageUrls.length > 0
+                       //     ? [
+                       //         ...imageUrls.slice(0, -1).map(url => ({
+                       //             type: "image",
+                       //             url,
+                       //             size: "full",
+                       //             aspectRatio: "16:9",
+                       //             aspectMode: "cover",
+                       //             margin: "md"
+                       //         })),
+                       //         {
+                       //             type: "text",
+                       //             text: "ลายเซ็น",
+                       //             size: "sm",
                                     // weight: "bold",
-                                    margin: "md"
-                                },
-                                {
-                                    type: "image",
-                                    url: imageUrls[imageUrls.length - 1],
-                                    size: "full",
-                                    aspectRatio: "16:9",
-                                    aspectMode: "cover",
-                                    margin: "md"
-                                }
-                            ]
-                            : [])
+                       //             margin: "md"
+                       //         },
+                       //         {
+                      //              type: "image",
+                      //              url: imageUrls[imageUrls.length - 1],
+                      //              size: "full",
+                      //              aspectRatio: "16:9",
+                     //               aspectMode: "cover",
+                     //               margin: "md"
+                     //           }
+                     //       ]
+                     //       : [])
+
+			...buildImageContents()
 
                     ]
                 }
@@ -2474,20 +2617,57 @@ exports.getTechnicianReport = async (req, res) => {
         // 7. รวมข้อมูลรายช่าง
         const reportWithDetails = allTechnicians.map(technician => {
             const techId = technician.userId;
-            const accept = acceptedJobs.find(a => a.techAcceptUserId === techId);
+//            const accept = acceptedJobs.find(a => a.techAcceptUserId === techId);
+//            const complete = completedJobs.find(c => c.techCompleteUserId === techId);
+//
+//            const acceptedCount = accept ? accept._count._all : 0;
+//            const completedCount = complete ? complete._count._all : 0;
+
+//            const total = acceptedCount + (completedCount - (accept?.techAcceptUserId === complete?.techCompleteUserId ? completedCount : 0));
+//          const successRate = total > 0 ? parseFloat(((completedCount / total) * 100).toFixed(2)) : null;
+// A = งานที่ตัวเองรับมา
+            const A = repairs.filter(r => r.techAcceptUserId === techId).length;
+
+            // B = งานที่รับเองและจบเอง
+            const B = repairs.filter(r =>
+                r.techAcceptUserId === techId &&
+                r.techCompleteUserId === techId &&
+                r.status === 'completed'
+            ).length;
+
+            // C = งานที่เราไปจบให้คนอื่น
+            const C = repairs.filter(r =>
+                r.techAcceptUserId !== techId &&
+                r.techCompleteUserId === techId &&
+                r.status === 'completed'
+            ).length;
+
+            // D = งานที่คนอื่นเอาของเราไปจบ
+            const D = repairs.filter(r =>
+                r.techAcceptUserId === techId &&
+                r.techCompleteUserId !== techId &&
+                r.status === 'completed'
+            ).length;
+
+            const denominator = A + C - D;
+            const numerator = B + C;
+
+            const successRate = denominator > 0
+                ? parseFloat(((numerator / denominator) * 100).toFixed(2))
+                : null;
+
             const complete = completedJobs.find(c => c.techCompleteUserId === techId);
 
-            const acceptedCount = accept ? accept._count._all : 0;
-            const completedCount = complete ? complete._count._all : 0;
-
-            const total = acceptedCount + (completedCount - (accept?.techAcceptUserId === complete?.techCompleteUserId ? completedCount : 0));
-            const successRate = total > 0 ? parseFloat(((completedCount / total) * 100).toFixed(2)) : null;
-
+//const successRate = acceptedCount > 0 ? parseFloat(((completedCount / acceptedCount) * 100).toFixed(2)): null;
             return {
                 techUserId: techId,
                 technicianName: technician.name || 'Unknown',
-                acceptedJobs: acceptedCount,
-                completedJobs: completedCount,
+         //       acceptedJobs: acceptedCount,
+         //       completedJobs: completedCount,
+                 acceptedJobs: A,                            // เปลี่ยนจาก acceptedCount
+                 completedJobs: B + C,                       // เปลี่ยนจาก completedCoun
+                tekenFromOtherCount: C, //งานที่เราไปจบให้คนอื่น
+		takenByOtherCount: D, //งานที่คนอื่นจบให้เรา
                 successRate,
                 averageStar: complete?._avg?.workStar ? parseFloat(complete._avg.workStar.toFixed(2)) : null,
                 buildings: [...new Set(technician.techBuilds.map(tb => tb.building.buildingName))],
@@ -2509,88 +2689,221 @@ exports.getTechnicianReport = async (req, res) => {
 };
 
 
-exports.getTechReportById = async (req, res) => {
-    try {
-        const { userId } = req.params;
+//exports.getTechReportById = async (req, res) => {
+  //  try {
+    //    const { userId } = req.params;
 
         // งานที่ช่างรับ
-        const acceptRepair = await prisma.repair.findMany({
-            where: {
-                techAcceptUserId: userId,
-                isDraft: false
-            },
-            include: {
-                customer: true,
-                company: true,
-                building: true,
-                unit: true,
-                images: true
-            }
-        });
+      //  const acceptRepair = await prisma.repair.findMany({
+        //    where: {
+          //      techAcceptUserId: userId,
+            //    isDraft: false
+          //  },
+          //  include: {
+            //    customer: true,
+             //   company: true,
+            //    building: true,
+            //    unit: true,
+            //    images: true
+          //  }
+      //  });
 
         // งานที่ช่างทำเสร็จ
-        const completedRepair = await prisma.repair.findMany({
-            where: {
-                techCompleteUserId: userId,
-                isDraft: false
-            },
-            include: {
-                customer: true,
-                company: true,
-                building: true,
-                unit: true,
-                images: true
-            }
-        });
+      //  const completedRepair = await prisma.repair.findMany({
+       //     where: {
+         //       techCompleteUserId: userId,
+           //     isDraft: false
+          //  },
+         //   include: {
+           //     customer: true,
+            //    company: true,
+            //    building: true,
+            //    unit: true,
+              //  images: true
+          //  }
+      //  });
 
         // ข้อมูลช่าง + ตึกที่สังกัด (TechBuild)
-        const technician = await prisma.technician.findUnique({
-            where: {
-                userId: userId
-            },
-            include: {
-                techBuilds: {
-                    include: {
-                        building: true
-                    }
-                }
-            }
-        });
+      //  const technician = await prisma.technician.findUnique({
+        //    where: {
+          //      userId: userId
+          //  },
+         //   include: {
+         //       techBuilds: {
+          //          include: {
+           //             building: true
+             //       }
+             //   }
+          //  }
+      //  });
 
-        const acceptedCount = acceptRepair.length
-        const completedCount = completedRepair.length
+      //  const acceptedCount = acceptRepair.length
+      //  const completedCount = completedRepair.length
 
-        const percentComplete = acceptedCount > 0
-            ? Math.round((completedCount / acceptedCount) * 100)
-            : 0;
+     //   const percentComplete = acceptedCount > 0
+       //     ? Math.round((completedCount / acceptedCount) * 100)
+         //   : 0;
 
-        res.json({
-            message: "Get tech report by id success",
-            data: {
-                technician: {
-                    name: technician?.name || '',
-                    phone: technician?.phone || '',
-                    role: technician?.role || '',
-                    userId: technician?.userId || '',
-                    buildings: [
-                        ...new Set(
-                            technician.techBuilds.map(tb => tb.building.buildingName)
-                        )
-                    ] || []
-                },
-                accepted: acceptRepair,
-                completed: completedRepair,
-                summary: {
-                    acceptedCount,
-                    completedCount,
-                    percentComplete
-                }
-            }
-        });
+//	const validWorkStars = completedRepair
+  //       .map((repair) => repair.workStar)
+    //     .filter((star) => star !== null && star !== undefined);
 
-    } catch (error) {
-        console.log(error);
-        res.status(500).json({ message: "Server Error" });
+      //  const totalWorkStar = validWorkStars.reduce((sum, star) => sum + star, 0);
+
+      //  const averageWorkStar =
+       //   validWorkStars.length > 0
+       //   ? parseFloat((totalWorkStar / validWorkStars.length).toFixed(2))
+       //   : 0;
+
+//	console.log(averageWorkStar);
+
+  //      res.json({
+    //        message: "Get tech report by id success",
+      //      data: {
+        //        technician: {
+          //          name: technician?.name || '',
+            //        phone: technician?.phone || '',
+              //      role: technician?.role || '',
+                //    userId: technician?.userId || '',
+		//    averageWorkStar,
+                  //  buildings: [
+                   //     ...new Set(
+                     //       technician.techBuilds.map(tb => tb.building.buildingName)
+                     //   )
+                  //  ] || []
+              //  },
+              //  accepted: acceptRepair,
+             //   completed: completedRepair,
+             //   summary: {
+              //      acceptedCount,
+                //    completedCount,
+              //      percentComplete
+             //   }
+          //  }
+      //  });
+
+  //  } catch (error) {
+    //    console.log(error);
+      //  res.status(500).json({ message: "Server Error" });
+  //  }
+//};
+
+exports.getTechReportById = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { startDate, endDate } = req.query;
+
+    let dateFilter = {};
+    if (startDate && endDate) {
+      const start = new Date(`${startDate}T00:00:00.000Z`);
+      const end = new Date(`${endDate}T23:59:59.999Z`);
+      dateFilter = {
+        completeDate: {
+          gte: start,
+          lte: end,
+        },
+      };
     }
+
+    // งานที่รับ
+    const acceptRepair = await prisma.repair.findMany({
+      where: {
+        techAcceptUserId: userId,
+        isDraft: false,
+        ...dateFilter, // กรองตาม completeDate เหมือน getTechnicianReport
+      },
+      include: {
+        customer: true,
+        company: true,
+        building: true,
+        unit: true,
+        images: true,
+      },
+    });
+
+    // งานที่จบ
+    const completedRepair = await prisma.repair.findMany({
+      where: {
+        techCompleteUserId: userId,
+        isDraft: false,
+        status: 'completed', // ต้องเป็นงานที่จบเท่านั้น
+        ...dateFilter,
+      },
+      include: {
+        customer: true,
+        company: true,
+        building: true,
+        unit: true,
+        images: true,
+      },
+    });
+
+    // ค่าเฉลี่ยดาวจากงานที่จบ
+    const averageStarResult = await prisma.repair.aggregate({
+      _avg: { workStar: true },
+      where: {
+        techCompleteUserId: userId,
+        status: 'completed',
+        workStar: { not: null },
+        ...dateFilter,
+      },
+    });
+
+    const technician = await prisma.technician.findUnique({
+      where: { userId },
+      include: { techBuilds: { include: { building: true } } },
+    });
+
+    const acceptedCount = acceptRepair.length;
+    const completedCount = completedRepair.length;
+    const percentComplete =
+      acceptedCount > 0 ? Math.round((completedCount / acceptedCount) * 100) : 0;
+
+    res.json({
+      message: "Get tech report by id success",
+      data: {
+        technician: {
+          name: technician?.name || "",
+          phone: technician?.phone || "",
+          role: technician?.role || "",
+          userId: technician?.userId || "",
+          buildings:
+            [...new Set(technician?.techBuilds.map((tb) => tb.building.buildingName))] || [],
+        },
+        accepted: acceptRepair,
+        completed: completedRepair,
+        summary: {
+          acceptedCount,
+          completedCount,
+          percentComplete,
+          averageStar: averageStarResult._avg.workStar
+            ? parseFloat(averageStarResult._avg.workStar.toFixed(2))
+            : null,
+        },
+      },
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Server Error" });
+  }
 };
 
+
+exports.deleteContractorFake = async (req, res) => {
+    try {
+        const { id } = req.params
+        const contractor = await prisma.contractorNote.update({
+            where: {
+                id: Number(id)
+            },
+            data: {
+                isDelete: true,
+                fakeDelete: true
+            }
+        })
+        res.json({ message: "Delete contractor success", data: contractor })
+    } catch (error) {
+        console.log(error)
+        res.status(500).json({ message: "Server Error" })
+    }
+}

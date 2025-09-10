@@ -16,7 +16,7 @@ datasource db {
 model Customer {
   id        Int      @id @default(autoincrement())
   name      String   @db.VarChar(255)
-  phone     String?  @unique @db.VarChar(20)
+  phone     String?  @db.VarChar(20)
   nickname  String?  @db.VarChar(20)
   email     String?  @db.VarChar(50)
   userId    String?  @unique @db.VarChar(50)
@@ -100,6 +100,7 @@ model RepairChoice {
   id         Int      @id @default(autoincrement())
   choiceName String?  @db.Text
   isDelete   Boolean  @default(false)
+  fakeDelete Boolean? @default(false)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -193,6 +194,7 @@ model ContractorNote {
   id        Int      @id @default(autoincrement())
   message   String   @db.VarChar(255)
   isDelete  Boolean  @default(false)
+  fakeDelete Boolean? @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
