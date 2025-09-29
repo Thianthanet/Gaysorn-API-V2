@@ -716,6 +716,26 @@ exports.getChoicesById = async (req, res) => {
         res.json({ message: "Get choice by Id success", data: choice })
     } catch (error) {
         console.log(error)
+        res.status(500).json({ message: "Server Error" })
+    }
+}
+
+exports.deleteChoiceFake = async (req, res) => {
+    try {
+        const { id } = req.params
+        const choice = await prisma.repairChoice.update({
+            where: {
+                id: Number(id)
+            },
+            data: {
+                isDelete: true,
+                fakeDelete: true
+            }
+        })
+        res.json({ message: "Delete Choice success", data: choice })
+    } catch (error) {
+        console.log(error)
+        res.status(500).json({ message: "Server Error" })
     }
 }
 
@@ -829,6 +849,7 @@ exports.getRepairById = async (req, res) => {
             return res.status(404).json({ message: "Repair not found" });
         }
 
+<<<<<<< HEAD
         let customer = null;
 
         if (repair.customerUserId) {
@@ -861,6 +882,30 @@ exports.getRepairById = async (req, res) => {
         console.log(error);
         res.status(500).json({ message: "Server Error" });
     }
+=======
+   let owner = null
+   if (repair.ownerId) {
+    owner = await prisma.customer.findFirst({
+      where: { userId: repair.ownerId }
+    })
+
+   if (!owner) {
+    owner = await prisma.technician.findFirst({
+     where: { userId: repair.ownerId }  
+    })
+  }
+  }
+
+    res.json({
+      ...repair,
+      customer: customer || null,
+      owner: owner ? { name: owner.name, phone: owner.phone  } : null
+    });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ message: "Server Error" });
+  }
+>>>>>>> 3e5c465aa1f60c5df90cf4e9e8cfe5c0ce1f22f0
 }
 
 
@@ -1074,6 +1119,7 @@ exports.getAllRepair = async (req, res) => {
         })
 
         // เติมข้อมูล owner
+<<<<<<< HEAD
         const repairWithOwner = await Promise.all(
             repair.map(async r => {
                 let owner = null
@@ -1092,6 +1138,26 @@ exports.getAllRepair = async (req, res) => {
                 return { ...r, owner }
             })
         )
+=======
+      const repairWithOwner = await Promise.all(
+      repair.map(async r => {
+      let owner = null
+       if (r.ownerId) {
+         owner = await prisma.customer.findUnique({
+          where: { userId: r.ownerId },
+          select: { id: true, name: true, phone: true, userId: true }
+        })
+         if (!owner) {
+            owner = await prisma.technician.findUnique({
+            where: { userId: r.ownerId },
+            select: { id: true, name: true, phone: true, userId: true }
+          })
+        }
+      }
+      return { ...r, owner }
+    })
+  )
+>>>>>>> 3e5c465aa1f60c5df90cf4e9e8cfe5c0ce1f22f0
 
         res.json({
             message: "Get all repair success",
@@ -1158,7 +1224,11 @@ exports.getRepairByTechnician = async (req, res) => {
                 createDate: 'desc'
             },
         })
+<<<<<<< HEAD
 
+=======
+        
+>>>>>>> 3e5c465aa1f60c5df90cf4e9e8cfe5c0ce1f22f0
         // ✅ หา owner จาก ownerId ในแต่ละใบงาน
         const repairsWithOwner = await Promise.all(
             repairs.map(async (repair) => {
@@ -1180,6 +1250,7 @@ exports.getRepairByTechnician = async (req, res) => {
                     }
                 }
 
+<<<<<<< HEAD
                 return {
                     ...repair,
                     owner // ✅ แนบเจ้าของใบงานไปด้วย
@@ -1188,6 +1259,16 @@ exports.getRepairByTechnician = async (req, res) => {
         )
 
         res.json({ message: "Get repair by techbuild success", data: repairsWithOwner })
+=======
+                return { 
+                    ...repair, 
+                    owner // ✅ แนบเจ้าของใบงานไปด้วย
+                }
+            })
+        ) 
+        
+        res.json({ message: "Get repair by techbuild success", data: repairsWithOwner })	
+>>>>>>> 3e5c465aa1f60c5df90cf4e9e8cfe5c0ce1f22f0
     } catch (error) {
         console.log(error)
         res.status(500).json({ message: "Server Error" })
@@ -1265,6 +1346,7 @@ exports.getAllCustomerRepairByCompany = async (req, res) => {
         })
 
         // ✅ หา owner จากตาราง Customer หรือ Technician
+<<<<<<< HEAD
         const repairsWithOwner = await Promise.all(
             repairs.map(async (repair) => {
                 if (!repair.ownerId) return { ...repair, owner: null }
@@ -1290,6 +1372,33 @@ exports.getAllCustomerRepairByCompany = async (req, res) => {
             })
         )
 
+=======
+      const repairsWithOwner = await Promise.all(
+        repairs.map(async (repair) => {
+          if (!repair.ownerId) return { ...repair, owner: null }
+
+          // หา owner จาก customer ก่อน
+          let owner = await prisma.customer.findUnique({
+            where: { userId: repair.ownerId },
+            select: { id: true, name: true, phone: true }
+          })
+
+          if (!owner) {
+            // ถ้าไม่เจอใน customer ลองหาใน technician
+            owner = await prisma.technician.findUnique({
+              where: { userId: repair.ownerId },
+             select: { id: true, name: true, phone: true }
+           })
+         }
+
+          return {
+            ...repair,
+            owner
+          }
+        })
+       )
+        
+>>>>>>> 3e5c465aa1f60c5df90cf4e9e8cfe5c0ce1f22f0
         res.json({ message: "Get repair by company success", data: repairsWithOwner })
     } catch (error) {
         console.log(error)
@@ -1661,6 +1770,7 @@ exports.getCompanyRepairCount = async (req, res) => {
 
 
 //exports.getCompanyAllRepair = async (req, res) => {
+<<<<<<< HEAD
 //  try {
 //    const { companyId } = req.params;
 
@@ -1728,6 +1838,75 @@ exports.getCompanyRepairCount = async (req, res) => {
 //    console.log(error);
 //  res.status(500).json({ message: "Server Error" });
 //  }
+=======
+  //  try {
+    //    const { companyId } = req.params;
+
+      //  const repairs = await prisma.repair.findMany({
+         //   where: {
+           //     companyId: Number(companyId),
+            //    isDraft: false,
+           // },
+           // include: {
+             //   customer: true,
+             //   acceptedBy: true,
+             //   completedBy: true,
+             //   company: true,
+             //   building: true,
+             //   unit: true,
+             //   images: true,
+             //   choices: {
+             //       include: {
+             //           repairChoice: true,
+             //       },
+             //   },
+          //  },
+      //  });
+
+       //  const totalRepairs = repairs.length;
+
+        // นับงานตามสถานะ
+       // let pending = 0;
+      //  let inProgress = 0;
+     //   let completed = 0;
+
+      //  repairs.forEach((job) => {
+        //    if (job.completedBy) {
+          //      completed++;
+          //  } else if (job.acceptedBy) {
+          //      inProgress++;
+          //  } else {
+            //    pending++;
+          //  }
+       // });
+
+      //  const companyData = {
+        //    companyName: repairs[0]?.company?.companyName || null,
+         //   buildingName: repairs[0]?.building?.buildingName || null,
+         //   unitName: repairs[0]?.unit?.unitName || null,
+         //   totalRepairs,
+         //   statusCount: {
+          //      pending,
+          //      inProgress,
+          //      completed,
+          //  },
+          //  statusPercentage: {
+          //      pending: totalRepairs ? ((pending / totalRepairs) * 100).toFixed(2) : 0,
+            //    inProgress: totalRepairs ? ((inProgress / totalRepairs) * 100).toFixed(2) : 0,
+            //    completed: totalRepairs ? ((completed / totalRepairs) * 100).toFixed(2) : 0,
+          //  },
+      //  };
+
+      //  res.json({
+       //     message: "Get repair by worker company success",
+         //   companyData: companyData,
+        //    data: repairs,
+      //  });
+  //  } catch (error) {
+    //    console.log(error);
+      //  res.status(500).json({ message: "Server Error" });
+  //  }
+>>>>>>> 3e5c465aa1f60c5df90cf4e9e8cfe5c0ce1f22f0
 // };
 
 
@@ -1853,9 +2032,13 @@ exports.deleteChoiceFake = async (req, res) => {
             },
             data: {
                 isDelete: true,
+<<<<<<< HEAD
                 fakeDelete: true,
                 customer: true,
                 technician: true
+=======
+                fakeDelete: true
+>>>>>>> 3e5c465aa1f60c5df90cf4e9e8cfe5c0ce1f22f0
             }
         })
         res.json({ message: "Delete Choice success", data: choice })

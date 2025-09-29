@@ -215,18 +215,30 @@ exports.createCustomer = async (req, res) => {
       email,
       // userId,
       unitName,
+<<<<<<< HEAD
       //  unitName: rawUnitName,
+=======
+    //  unitName: rawUnitName,
+>>>>>>> 3e5c465aa1f60c5df90cf4e9e8cfe5c0ce1f22f0
       buildingName,
       companyName
     } = req.body;
 
     // ➤ เช็คข้อมูลที่จำเป็น
+<<<<<<< HEAD
     if (!buildingName || !companyName) {
+=======
+    if ( !buildingName || !companyName) {
+>>>>>>> 3e5c465aa1f60c5df90cf4e9e8cfe5c0ce1f22f0
       return res.status(400).json({ message: ' buildingName และ companyName ให้ครบถ้วน' });
     }
 
     // ➤ ถ้า unitName ว่าง ให้ตั้งเป็น '-'
+<<<<<<< HEAD
     // const unitName = rawUnitName && rawUnitName.trim() !== '' ? rawUnitName : '-';
+=======
+   // const unitName = rawUnitName && rawUnitName.trim() !== '' ? rawUnitName : '-';
+>>>>>>> 3e5c465aa1f60c5df90cf4e9e8cfe5c0ce1f22f0
 
     // ➤ หา building จากชื่อ หรือสร้างใหม่
     let building = await prisma.building.findFirst({
@@ -274,6 +286,7 @@ exports.createCustomer = async (req, res) => {
       });
     }
 
+<<<<<<< HEAD
     //  let unit = null;
     //  if (unitName !== '-') {
     // ➤ หา unit จากชื่อ + companyId หรือสร้างใหม่
@@ -295,6 +308,29 @@ exports.createCustomer = async (req, res) => {
     //     customer: existingCustomer
     //    });
     //   }
+=======
+ //  let unit = null;
+  //  if (unitName !== '-') {
+      // ➤ หา unit จากชื่อ + companyId หรือสร้างใหม่
+   //   unit = await prisma.units.findFirst({
+   //     where: { unitName, companyId: company.id }
+   //   });
+    //  if (!unit) {
+     //   unit = await prisma.units.create({
+     //     data: { unitName, company: { connect: { id: company.id } } }
+     //   });
+   //   }
+   // }
+
+    // ➤ เช็คว่าลูกค้าเบอร์นี้ลงทะเบียนแล้วหรือยัง
+//    const existingCustomer = await prisma.customer.findUnique({ where: { phone } });
+  //  if (existingCustomer) {
+   //   return res.status(200).json({
+   //     message: 'เบอร์โทรนี้ได้ลงทะเบียนไว้แล้ว',
+   //     customer: existingCustomer
+  //    });
+ //   }
+>>>>>>> 3e5c465aa1f60c5df90cf4e9e8cfe5c0ce1f22f0
 
     // ➤ สร้างลูกค้าใหม่
     const newCustomer = await prisma.customer.create({
@@ -305,7 +341,11 @@ exports.createCustomer = async (req, res) => {
         email,
         // userId,
         unit: { connect: { id: unit.id } }
+<<<<<<< HEAD
         // ...(unit ? { unit: { connect: { id: unit.id } } } : {})
+=======
+     // ...(unit ? { unit: { connect: { id: unit.id } } } : {})
+>>>>>>> 3e5c465aa1f60c5df90cf4e9e8cfe5c0ce1f22f0
       }
     });
 
