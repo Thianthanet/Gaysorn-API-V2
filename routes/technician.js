@@ -1,5 +1,5 @@
 const express = require('express')
-const { getTechnicianById, completeRepair, createRepairTech, saveDraftRepair, getDraftById, getMyRepairAccept, acceptRepairTech, getRelatedByUnit, getRelatedByCompany, getTechnicianReport, getTechReportById, createContractorNote, getContractor, updateContractor, approveContractor } = require('../controllers/technician')
+const { getTechnicianById, completeRepair, createRepairTech, saveDraftRepair, getDraftById, getMyRepairAccept, acceptRepairTech, getRelatedByUnit, getRelatedByCompany, getTechnicianReport, getTechReportById, createContractorNote, getContractor, updateContractor, approveContractor, deleteContractorFake } = require('../controllers/technician')
 const upload = require('../middlewares/upload')
 const { updateTechnician, removeTechBuild } = require('../controllers/user')
 const router = express.Router()
@@ -22,5 +22,6 @@ router.post('/createContractor', createContractorNote)
 router.get('/getContractor', getContractor)
 router.patch('/updateContractor', updateContractor)
 router.patch('/approveContractor', approveContractor)
+router.patch('/deleteContractor/:id', deleteContractorFake)
 
 module.exports = router

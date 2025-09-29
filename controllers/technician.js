@@ -6,6 +6,7 @@ const { sendLineNotify } = require('../utils/line')
 const upload = require('../middlewares/upload')
 const { wrap } = require('module')
 require('dotenv')
+const axios = require('axios')
 
 // const generateJobNo = async () => {
 //     const now = new Date()
@@ -567,7 +568,10 @@ exports.createRepairTech = async (req, res) => {
             choiceDesc,
             companyName,
             preworkDate,
+            floor,
         } = req.body;
+
+        console.log("floor", floor)
 
         const rawChoices = req.body.choices;
         const choices = Array.isArray(rawChoices)
@@ -664,6 +668,15 @@ exports.createRepairTech = async (req, res) => {
         if (customerUserId && customerUserId.trim() !== "") {
             displayCustomerName = customer.name ?? "-"
             displayCustomerPhone = customer.phone ?? "-"
+        } else if (ownerId && ownerId.trim() !== "") {
+            const tech = await prisma.technician.findFirst({
+                where: { userId: ownerId.trim() }
+            })
+
+            if (tech) {
+                displayCustomerName = tech.name ?? "-"
+                displayCustomerPhone = tech.phone ?? "-"
+            }
         }
 
         // ✅ Generate Job Number
@@ -709,6 +722,7 @@ exports.createRepairTech = async (req, res) => {
             status: "pending",
             companyName: company.companyName,
             preworkDate: parsedPreworkDate,
+            floor,
             choices: {
                 create: choiceConnects
             },
@@ -798,8 +812,16 @@ exports.createRepairTech = async (req, res) => {
                             type: "box",
                             layout: "baseline",
                             contents: [
-                                { type: "text", text: `สถานที่ :`, size: "sm", flex: 2 },
+                                { type: "text", text: `อาคาร :`, size: "sm", flex: 2 },
                                 { type: "text", text: `${building.buildingName}, ${unit.unitName}`, size: "sm", wrap: true, flex: 4 },
+                            ]
+                        },
+                        {
+                            type: "box",
+                            layout: "baseline",
+                            contents: [
+                                { type: "text", text: `ชั้น :`, size: "sm", flex: 2 },
+                                { type: "text", text: `${floor || "-"}`, size: "sm", flex: 4 }
                             ]
                         },
                         {
@@ -973,8 +995,14 @@ exports.createRepairTech = async (req, res) => {
 
             const userIds = customersInCompany.map(c => c.userId).filter(uid => !!uid);
 
-            for (const userId of userIds) {
-                await sendLineNotify(userId, messageToCustomer);
+            // for (const userId of userIds) {
+            //   await sendLineNotify(userId, messageToCustomer);
+            // }
+
+            if (userIds.length > 0) {
+                for (const userId of userIds) {
+                    await sendLineNotify(userId, messageToCustomer)
+                }
             }
         }
 
@@ -1236,7 +1264,7 @@ exports.getContractor = async (req, res) => {
 
 exports.updateContractor = async (req, res) => {
     try {
-        const { id, message } = req.body
+        const { id, message, number } = req.body
         const contractor = await prisma.contractorNote.update({
             where: {
                 id: Number(id)
@@ -1270,6 +1298,205 @@ exports.approveContractor = async (req, res) => {
     }
 }
 
+// exports.saveDraftRepair = async (req, res) => {
+//     try {
+//         const { id, actionDetail, workStar, contractorNote } = req.body
+//         const protocol = req.headers['x-forwarded-proto'] || req.protocol
+//         const imageUrls = (req.files || []).map(file => {
+//             return `${protocol}://${req.get('host')}/uploads/${file.filename}`
+//         })
+
+//         const draftRepair = await prisma.repair.update({
+//             where: { id: Number(id) },
+//             data: {
+//                 isDraft: true,
+//                 draftDate: new Date(),
+//                 actionDetail,
+//                 workStar: Number(workStar),
+//                 contractorNote: contractorNote || "-",
+//                 images: {
+//                     create: imageUrls.map(url => ({
+//                         url,
+//                         uploadBy: 'tech',
+//                         isDraft: true,
+//                     }))
+//                 }
+//             },
+//             include: {
+//                 building: true,
+//                 company: true,
+//                 unit: true,
+//                 technician: true
+//             }
+//         })
+
+//         const webDetail = `${process.env.WEB_BASE_URL}/complete/${draftRepair.id}`
+//         // const formatTHDate = (date) => {
+//         //     if (!date) return "-";
+//         //     const m = moment(date).locale("th"); // ตั้ง locale เป็นไทย
+//         //     const day = m.format("D");
+//         //     const month = m.format("MMM");
+//         //     const year = (m.year() + 543).toString().slice(-2);
+//         //     const time = m.format("HH:mm");
+//         //     return `${day} ${month} ${year} เวลา ${time} น.`;
+//         // }
+//         const formatTHDate = (date) => {
+//             if (!date) return "-";
+//             try {
+//                 const m = moment(date).locale("th");
+//                 const day = m.format("D");
+//                 const month = m.format("MMM");
+//                 const year = (m.year() + 543).toString().slice(-2);
+//                 const time = m.format("HH:mm");
+//                 return `${day} ${month} ${year} เวลา ${time} น.`;
+//             } catch (error) {
+//                 return "-";
+//             }
+//         }
+
+//         // ใช้กับ draftRepair
+//         const createTime = formatTHDate(draftRepair.createDate);
+//         const acceptDateTH = formatTHDate(draftRepair.acceptDate);
+//         const preworkDateTH = draftRepair.preworkDate ? formatTHDate(draftRepair.preworkDate) : "-";
+//         const draftDateTH = formatTHDate(draftRepair.draftDate);
+//         const safeText = (text) => text ? text : "-";
+//         // ✅ ตัวอย่างข้อความ Flex Message
+//         const flexMsgGroup = {
+//             type: 'flex',
+//             altText: `📢 งานหมายเลข ${draftRepair.jobNo} มีการบันทึกแบบร่าง`,
+//             contents: {
+//                 type: 'bubble',
+//                 body: {
+//                     type: 'box',
+//                     layout: 'vertical',
+//                     contents: [
+//                         { type: "text", text: "📋 อัพเดทงานซ่อม (Draft)", size: "lg", weight: "bold", color: "#333" },
+//                         {
+//                             type: "box",
+//                             layout: "baseline",
+//                             contents: [
+//                                 { type: "text", text: "หมายเลขงาน :", size: "sm", flex: 2 },
+//                                 { type: "text", text: `${draftRepair.jobNo || "-"}`, size: "sm", flex: 4 }
+//                             ]
+//                         },
+//                         {
+//                             type: "box",
+//                             layout: "baseline",
+//                             contents: [
+//                                 { type: "text", text: "วันที่แจ้ง :", size: "sm", flex: 2 },
+//                                 { type: "text", text: `${createTime || "-"}`, size: "sm", flex: 4 }
+//                             ]
+//                         },
+//                         // ✅ เพิ่มเฉพาะเมื่อ preworkDateTH มีค่า
+//                         ...(preworkDateTH ? [{
+//                             type: "box",
+//                             layout: "baseline",
+//                             contents: [
+//                                 { type: "text", text: "วันนัดเข้าซ่อม :", size: "sm", flex: 2 },
+//                                 { type: "text", text: `${preworkDateTH || "-"}`, size: "sm", flex: 4 }
+//                             ]
+//                         }] : []),
+//                         {
+//                             type: "box",
+//                             layout: "baseline",
+//                             contents: [
+//                                 { type: "text", text: "วันที่ดำเนินการ :", size: "sm", flex: 2 },
+//                                 { type: "text", text: `${acceptDateTH || "-"}`, size: "sm", flex: 4 }
+//                             ]
+//                         },
+//                         {
+//                             type: "box",
+//                             layout: "baseline",
+//                             contents: [
+//                                 { type: "text", text: "วันที่บันทึกแบบร่าง :", size: "sm", flex: 2 },
+//                                 { type: "text", text: `${draftDateTH || "-"}`, size: "sm", flex: 4 }
+//                             ]
+//                         },
+//                         {
+//                             type: "box",
+//                             layout: "baseline",
+//                             contents: [
+//                                 { type: "text", text: "บริษัท :", size: "sm", flex: 2 },
+//                                 { type: "text", text: `${draftRepair?.company?.companyName || "-"}`, size: "sm", flex: 4 }
+//                             ]
+//                         },
+//                         {
+//                             type: "box",
+//                             layout: "baseline",
+//                             contents: [
+//                                 { type: "text", text: "อาคาร :", size: "sm", flex: 2 },
+//                                 { type: "text", text: `${draftRepair?.building?.buildingName || "-"}, ${safeText(draftRepair.unit?.unitName) || "-"}`, size: "sm", flex: 4 }
+//                             ]
+//                         },
+//                         {
+//                             type: "box",
+//                             layout: "baseline",
+//                             contents: [
+//                                 { type: "text", text: "ผู้ดำเนินการ :", size: "sm", flex: 2 },
+//                                 { type: "text", text: `${draftRepair?.technician?.name || "-"} (${draftRepair.technician?.phone || "-"})`, size: "sm", flex: 4 }
+//                             ]
+//                         },
+//                         {
+//                             type: "box",
+//                             layout: "baseline",
+//                             contents: [
+//                                 { type: "text", text: "สถานะ :", size: "sm", color: "#F0B100", weight: "bold", flex: 2 },
+//                                 { type: "text", text: "อยู่ระหว่างดำเนินการ (Draft)", size: "sm", color: "#F0B100", weight: "bold", flex: 4 }
+//                             ]
+//                         },
+//                         {
+//                             type: "box",
+//                             layout: "baseline",
+//                             contents: [
+//                                 { type: "text", text: "หมายเหตุ :", size: "sm", weight: "bold", flex: 2 },
+//                                 { type: "text", text: `${contractorNote || "-"}`, size: "sm", weight: "bold", flex: 4 }
+//                             ]
+//                         }
+//                     ]
+//                 },
+//                 footer: {
+//                     type: "box",
+//                     layout: "vertical",
+//                     contents: [
+//                         {
+//                             type: "button",
+//                             style: "primary",
+//                             action: {
+//                                 type: "uri",
+//                                 label: "กรอกข้อมูลการซ่อม",
+//                                 uri: webDetail
+//                             }
+//                         }
+//                     ]
+//                 }
+//             }
+//         };
+
+//         console.log(draftRepair.building?.groupId)
+//         console.log(flexMsgGroup)
+//         console.log(webDetail)
+
+
+//         // ✅ ส่งเข้ากลุ่มไลน์ถ้ามี groupId
+//         if (draftRepair.building?.groupId) {
+//             await axios.post("https://api.line.me/v2/bot/message/push", {
+//                 to: draftRepair.building.groupId,
+//                 messages: [flexMsgGroup]
+//             }, {
+//                 headers: {
+//                     "Content-Type": "application/json",
+//                     "Authorization": `Bearer ${process.env.LINE_CHANNEL_ACCESS_TOKEN}`
+//                 }
+//             });
+//         }
+
+//         res.json({ message: "Draft success", data: draftRepair })
+//     } catch (error) {
+//         console.log(error)
+//         res.status(500).json({ message: "Server Error" })
+//     }
+// }
+
 exports.saveDraftRepair = async (req, res) => {
     try {
         const { id, actionDetail, workStar, contractorNote } = req.body
@@ -1282,9 +1509,10 @@ exports.saveDraftRepair = async (req, res) => {
             where: { id: Number(id) },
             data: {
                 isDraft: true,
+                // draftDate: new Date(),
                 actionDetail,
                 workStar: Number(workStar),
-                contractorNote: contractorNote || null,
+                contractorNote: contractorNote || "-",
                 images: {
                     create: imageUrls.map(url => ({
                         url,
@@ -1292,15 +1520,212 @@ exports.saveDraftRepair = async (req, res) => {
                         isDraft: true,
                     }))
                 }
+            },
+            include: {
+                building: true,
+                company: true,
+                unit: true,
+                technician: true
             }
         })
+
+        const webDetail = `${process.env.WEB_BASE_URL}/complete/${draftRepair.id}`
+
+        const formatTHDate = (date) => {
+            if (!date) return "-";
+            try {
+                const m = moment(date).locale("th");
+                const day = m.format("D");
+                const month = m.format("MMM");
+                const year = (m.year() + 543).toString().slice(-2);
+                const time = m.format("HH:mm");
+                return `${day} ${month} ${year} เวลา ${time} น.`;
+            } catch (error) {
+                return "-";
+            }
+        }
+
+        // ใช้กับ draftRepair
+        const createTime = formatTHDate(draftRepair.createDate);
+        const acceptDateTH = formatTHDate(draftRepair.acceptDate);
+        const preworkDateTH = draftRepair.preworkDate ? formatTHDate(draftRepair.preworkDate) : "-";
+        const draftDateTH = formatTHDate(draftRepair.draftDate);
+
+        // ฟังก์ชันตัดข้อความไม่ให้ยาวเกินไป
+        const truncateText = (text, maxLength = 40) => {
+            if (!text) return "-";
+            return text.length > maxLength ? text.substring(0, maxLength) + "..." : text;
+        };
+
+        // ✅ สร้าง Flex Message ที่ถูกต้อง
+        // ✅ แก้ไข Flex Message - เอาค่า color ออกหรือใช้ค่าที่ถูกต้อง
+        const flexMsgGroup = {
+            type: 'flex',
+            altText: `📢 งานหมายเลข ${draftRepair.jobNo} มีการบันทึกแบบร่าง`,
+            contents: {
+                type: 'bubble',
+                body: {
+                    type: 'box',
+                    layout: 'vertical',
+                    contents: [
+                        {
+                            type: "text",
+                            text: "📋 อัพเดทงานซ่อม (Draft)",
+                            size: "lg",
+                            weight: "bold",
+                            // ✅ แก้ไข: เอาค่า color ออก หรือใช้ค่าที่ถูกต้อง
+                            // color: "#333"  // ← ลบบรรทัดนี้ หรือใช้รูปแบบที่ถูกต้อง
+                        },
+                        {
+                            type: "box",
+                            layout: "baseline",
+                            contents: [
+                                { type: "text", text: "หมายเลขงาน :", size: "sm", flex: 2 },
+                                { type: "text", text: truncateText(draftRepair.jobNo), size: "sm", flex: 4 }
+                            ]
+                        },
+                        {
+                            type: "box",
+                            layout: "baseline",
+                            contents: [
+                                { type: "text", text: "วันที่แจ้ง :", size: "sm", flex: 2 },
+                                { type: "text", text: createTime, size: "sm", flex: 4 }
+                            ]
+                        },
+                        ...(preworkDateTH && preworkDateTH !== "-" ? [{
+                            type: "box",
+                            layout: "baseline",
+                            contents: [
+                                { type: "text", text: "วันนัดเข้าซ่อม :", size: "sm", flex: 2 },
+                                { type: "text", text: preworkDateTH, size: "sm", flex: 4 }
+                            ]
+                        }] : []),
+                        {
+                            type: "box",
+                            layout: "baseline",
+                            contents: [
+                                { type: "text", text: "วันที่ดำเนินการ :", size: "sm", flex: 2 },
+                                { type: "text", text: acceptDateTH, size: "sm", flex: 4 }
+                            ]
+                        },
+                        {
+                            type: "box",
+                            layout: "baseline",
+                            contents: [
+                                { type: "text", text: "วันที่บันทึกแบบร่าง :", size: "sm", flex: 2 },
+                                { type: "text", text: draftDateTH, size: "sm", flex: 4 }
+                            ]
+                        },
+                        {
+                            type: "box",
+                            layout: "baseline",
+                            contents: [
+                                { type: "text", text: "บริษัท :", size: "sm", flex: 2 },
+                                { type: "text", text: truncateText(draftRepair?.company?.companyName), size: "sm", flex: 4 }
+                            ]
+                        },
+                        {
+                            type: "box",
+                            layout: "baseline",
+                            contents: [
+                                { type: "text", text: "อาคาร :", size: "sm", flex: 2 },
+                                { type: "text", text: truncateText(`${draftRepair?.building?.buildingName || "-"}, ${draftRepair.unit?.unitName || "-"}`), size: "sm", flex: 4 }
+                            ]
+                        },
+                        {
+                            type: "box",
+                            layout: "baseline",
+                            contents: [
+                                { type: "text", text: "ผู้ดำเนินการ :", size: "sm", flex: 2 },
+                                { type: "text", text: truncateText(`${draftRepair?.technician?.name || "-"} (${draftRepair.technician?.phone || "-"})`), size: "sm", flex: 4 }
+                            ]
+                        },
+                        {
+                            type: "box",
+                            layout: "baseline",
+                            contents: [
+                                {
+                                    type: "text",
+                                    text: "สถานะ :",
+                                    size: "sm",
+                                    // ✅ ใช้รูปแบบสีที่ถูกต้อง
+                                    color: "#F0B100",
+                                    weight: "bold",
+                                    flex: 2
+                                },
+                                {
+                                    type: "text",
+                                    text: "อยู่ระหว่างดำเนินการ (Draft)",
+                                    size: "sm",
+                                    // ✅ ใช้รูปแบบสีที่ถูกต้อง
+                                    color: "#F0B100",
+                                    weight: "bold",
+                                    flex: 4
+                                }
+                            ]
+                        },
+                        ...(contractorNote ? [{
+                            type: "box",
+                            layout: "baseline",
+                            contents: [
+                                { type: "text", text: "หมายเหตุ :", size: "sm", flex: 2 },
+                                { type: "text", text: truncateText(contractorNote), size: "sm", flex: 4 }
+                            ]
+                        }] : [])
+                    ]
+                },
+                footer: {
+                    type: "box",
+                    layout: "vertical",
+                    contents: [
+                        {
+                            type: "button",
+                            style: "primary",
+                            height: "sm",
+                            action: {
+                                type: "uri",
+                                label: "กรอกข้อมูลการซ่อม",
+                                uri: webDetail
+                            }
+                        }
+                    ]
+                }
+            }
+        };
+
+        console.log("Group ID:", draftRepair.building?.groupId);
+        console.log("Web Detail:", webDetail);
+
+        // ✅ ตรวจสอบก่อนส่ง LINE
+        if (draftRepair.building?.groupId) {
+            try {
+                // ตรวจสอบว่า Flex Message ถูกต้องโดยการแปลงเป็น JSON
+                const testJson = JSON.stringify(flexMsgGroup);
+                console.log("Flex Message JSON length:", testJson.length);
+
+                await axios.post("https://api.line.me/v2/bot/message/push", {
+                    to: draftRepair.building.groupId,
+                    messages: [flexMsgGroup]
+                }, {
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${process.env.LINE_CHANNEL_ACCESS_TOKEN}`
+                    },
+                    timeout: 10000 // ตั้งค่า timeout 10 วินาที
+                });
+                console.log("LINE message sent successfully");
+            } catch (lineError) {
+                console.error("LINE API Error:", lineError.response?.data || lineError.message);
+                // ไม่ต้อง throw error ออกไปเพื่อไม่ให้กระทบการทำงานหลัก
+            }
+        }
+
         res.json({ message: "Draft success", data: draftRepair })
     } catch (error) {
-        console.log(error)
-        res.status(500).json({ message: "Server Error" })
+        console.error("Save Draft Error:", error);
+        res.status(500).json({ message: "Server Error", error: error.message })
     }
 }
-
 // exports.getDraftById = async (req, res) => {
 //     try {
 //         const { id } = req.params
@@ -1358,6 +1783,19 @@ exports.getDraftById = async (req, res) => {
         console.log(error);
         res.status(500).json({ message: "Server Error" });
     }
+
+    //  if (!draft || !Array.isArray(draft.images)) {  // ต้องมี {} ครอบ if
+    //    draft.images = [];
+    //  } else {
+    //    draft.images = draft.images.filter(img => !img.url.includes('signature'));
+    //  }
+
+    //  res.json({ message: "Get draft by id success", data: draft });
+    //} catch (error) {
+    //  console.log(error);
+    //  res.status(500).json({ message: "Server Error" });
+
+
 };
 
 
@@ -1365,7 +1803,7 @@ exports.getMyRepairAccept = async (req, res) => {
     try {
         const { userId } = req.params;
 
-        const repair = await prisma.repair.findMany({
+        const repairs = await prisma.repair.findMany({
             where: {
                 status: {
                     in: ["in_progress", "completed"],
@@ -1400,7 +1838,51 @@ exports.getMyRepairAccept = async (req, res) => {
             },
         });
 
-        res.json({ message: "Get my repair success", data: repair });
+        const result = [];
+        for (const repair of repairs) {
+            let owner = null;
+
+            // หาใน customer ก่อน
+            // owner = await prisma.customer.findUnique({
+            //     where: { userId: repair.ownerId || "" },
+            //     select: { id: true, name: true, phone: true, userId: true }
+            //  });
+
+            // ถ้าไม่ใช่ customer → หาใน technician
+            //  if (!owner) {
+            //      owner = await prisma.technician.findUnique({
+            //          where: { userId: repair.ownerId || "" },
+            //          select: { id: true, name: true, phone: true, userId: true }
+            //      });
+            //  }
+
+            if (repair.ownerId) {
+                owner = await prisma.customer.findUnique({
+                    where: { userId: repair.ownerId },
+                    select: { id: true, name: true, phone: true, userId: true }
+                });
+
+                if (!owner) {
+                    owner = await prisma.technician.findUnique({
+                        where: { userId: repair.ownerId },
+                        select: { id: true, name: true, phone: true, userId: true }
+                    });
+                }
+            }
+
+            result.push({
+                ...repair,
+                owner: owner ? {
+                    id: owner.id,
+                    name: owner.name,
+                    phone: owner.phone,
+                    userId: owner.userId
+                } : null
+            });
+        }
+
+        // res.json({ message: "Get my repair success", data: repair });
+        res.json({ message: "Get my repair success", data: result });
     } catch (error) {
         console.log(error);
         res.status(500).json({ message: "Server Error" });
@@ -1456,12 +1938,18 @@ exports.acceptRepairTech = async (req, res) => {
                     include: {
                         building: true
                     }
-                }
+                },
+                building: true,
+                unit: true
             }
         })
 
         const companyName = updateRepair.company?.companyName || "ไม่ทราบชื่อบริษัท"
+        const buildingName = updateRepair.building?.buildingName || "ไม่ทรายอาคาร"
+        const unitName = updateRepair.unit?.unitName || "ไม่ทราบยูนิต"
         const groupId = updateRepair.company?.building?.groupId
+
+        const floorText = updateRepair.floor || "-"
 
         const webDetail = `${process.env.WEB_BASE_URL}/complete/${updateRepair.id}`
         const createMoment = moment(updateRepair.createDate).tz("Asia/Bangkok").locale("th")
@@ -1523,8 +2011,24 @@ exports.acceptRepairTech = async (req, res) => {
                             type: "box",
                             layout: "baseline",
                             contents: [
+                                { type: "text", text: `ชั้น :`, size: "sm", flex: 2 },
+                                { type: "text", text: `${floorText}`, size: "sm", wrap: true, flex: 4 }
+                            ]
+                        },
+                        {
+                            type: "box",
+                            layout: "baseline",
+                            contents: [
                                 { type: "text", text: `บริษัท :`, size: "sm", flex: 2 },
                                 { type: "text", text: `${companyName}`, size: "sm", wrap: true, flex: 4 },
+                            ]
+                        },
+                        {
+                            type: "box",
+                            layout: "baseline",
+                            contents: [
+                                { type: "text", text: `อาคาร :`, size: "sm", flex: 2 },
+                                { type: "text", text: `${buildingName}, ${unitName}`, size: "sm", wrap: true, flex: 4 },
                             ]
                         },
                         {
@@ -1707,9 +2211,21 @@ exports.acceptRepairTech = async (req, res) => {
 
             const userIds = customersInCompany.map(c => c.userId).filter(uid => !!uid)
 
-            for (const userId of userIds) {
-                await sendLineNotify(userId, flexMsg)
+            // for (const userId of userIds) {
+            //     await sendLineNotify(userId, flexMsg)
+            //  }
+
+            if (userIds.length > 0) {
+                for (const userId of userIds) {
+                    await sendLineNotify(userId, flexMsg)
+                }
+                customerNotified = true
             }
+        }
+
+        // 👉 ถ้าไม่มีลูกค้าเลย → ส่ง flexMsgGroup เข้า group แทนลูกค้า
+        if (!customerNotified && groupId) {
+            await sendLineNotify(groupId, flexMsgGroup)
         }
 
         res.json({ message: "รับงานสำเร็จ", data: updateRepair })
@@ -1720,68 +2236,635 @@ exports.acceptRepairTech = async (req, res) => {
     }
 }
 
+// exports.completeRepair = async (req, res) => {
+//     try {
+//         const { id, actionDetail, workStar, techCompleteUserId, isDraft } = req.body
+
+//         // const protocol = req.headers['x-forwarded-proto'] || req.protocol
+//         // const imageUrls = (req.files || []).map(file => {
+//         //     return `${protocol}://${req.get('host')}/api/uploads/${file.filename}`
+//         // })
+//         const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https'
+//         const host = req.get('host')
+
+//         // สร้าง URL รูปภาพ พร้อม log เพื่อตรวจสอบ
+//         // const imageUrls = (req.files || []).map(file => {
+//         // const url = `${protocol}://${host}/uploads/${file.filename}`
+//         // console.log("✅ Image URL generated:", url)
+//         //   return url
+//         // })
+
+//         // ✅ แยกรูปงานกับลายเซ็น
+//         let normalImages = []
+//         let signatureImage = null
+
+//         for (const file of req.files || []) {
+//             const url = `${protocol}://${host}/uploads/${file.filename}`
+//             console.log("✅ Image URL generated:", url)
+
+//             if (file.filename.toLowerCase().includes("signature")) {
+//                 signatureImage = url
+//             } else {
+//                 normalImages.push(url)
+//             }
+//         }
+
+
+
+//         const repair = await prisma.repair.findFirst({
+//             where: { id: Number(id) },
+//             select: { createDate: true, status: true, isDraft: true }
+//         })
+
+//         if (!repair?.createDate) {
+//             return res.status(400).json({ error: "ไม่พบเวลาแจ้งงาน" })
+//         }
+
+//         if (repair.status === 'completed' && repair.isDraft === false) {
+//             return res.status(400).json({ message: 'งานนี้ถูกจบแล้ว ไม่สามารถจบซ้ำได้' })
+//         }
+
+//         const completeDate = moment().tz("Asia/Bangkok").toDate()
+//         const totalMinutes = Math.floor(
+//             (completeDate.getTime() - new Date(repair.createDate).getTime()) / (1000 * 60)
+//         )
+
+//         const updateRepair = await prisma.repair.update({
+//             where: { id: Number(id) },
+//             data: {
+//                 status: 'completed',
+//                 isDraft: false,
+//                 completeDate,
+//                 totalTime: totalMinutes,
+//                 actionDetail,
+//                 workStar: Number(workStar),
+//                 techCompleteUserId,
+//                 // images: {
+//                 //   create: imageUrls.map(url => ({
+//                 //     url,
+//                 //   uploadBy: 'tech'
+//                 // }))
+//                 // }
+//                 images: {
+//                     create: [...normalImages, signatureImage].filter(Boolean).map(url => ({
+//                         url,
+//                         uploadBy: 'tech'
+//                     }))
+//                 }
+//             }
+//         })
+
+//         const fullRepair = await prisma.repair.findFirst({
+//             where: { id: Number(id) },
+//             include: {
+//                 company: true,
+//                 building: true,
+//                 unit: true,
+//                 customer: true
+//             }
+//         })
+
+//         const jobNo = fullRepair.jobNo || `#${fullRepair.id}`
+//         // const createTime = moment(fullRepair.createDate).local("th").format("D MMM YY HH:mm") + " น. "
+//         // const completeTime = moment(completeDate).locale("th").format("D MMM YY HH:mm") + " น."
+
+//         const createMoment = moment(fullRepair.createDate).tz("Asia/Bangkok").locale("th");
+//         const completeMoment = moment(completeDate).tz("Asia/Bangkok").locale("th");
+
+//         const createYear = (createMoment.year() + 543).toString().slice(-2);
+//         const completeYear = (completeMoment.year() + 543).toString().slice(-2);
+
+//         const createTime = `${createMoment.format("D MMM")} ${createYear} เวลา ${createMoment.format("HH:mm")} น.`;
+//         const completeTime = `${completeMoment.format("D MMM")} ${completeYear} เวลา ${completeMoment.format("HH:mm")} น.`;
+
+//         const parsedPreworkDate = updateRepair.preworkDate ? new Date(updateRepair.preworkDate) : null
+
+//         const [acceptTech, completeTech] = await Promise.all([
+//             fullRepair.technicianUserId
+//                 ? prisma.technician.findUnique({ where: { userId: fullRepair.technicianUserId } })
+//                 : null,
+//             fullRepair.techCompleteUserId
+//                 ? prisma.technician.findUnique({ where: { userId: fullRepair.techCompleteUserId } })
+//                 : null
+//         ])
+
+//         let reporterName = "-"
+//         let reporterPhone = "-"
+
+//         if (fullRepair.customer) {
+//             reporterName = fullRepair.customer.name || "-"
+//             reporterPhone = fullRepair.customer.phone || "-"
+//         } else if (fullRepair.ownerId) {
+//             const ownerTech = await prisma.technician.findFirst({
+//                 where: { userId: fullRepair.ownerId }
+//             })
+//             if (ownerTech) {
+//                 reporterName = ownerTech.name || "-"
+//                 reporterPhone = ownerTech.phone || "-"
+//             }
+
+//         }
+
+//         // let technicianText = ""
+//         // if (
+//         //     fullRepair.technicianUserId &&
+//         //     fullRepair.techCompleteUserId &&
+//         //     fullRepair.technicianUserId === fullRepair.techCompleteUserId
+//         // ) {
+//         //     technicianText = `ผู้จบงาน:     ${completeTech?.name || "-"} (${completeTech?.phone})`
+//         // } else {
+//         //     technicianText = [
+//         //         `ผู้รับงาน:     ${acceptTech?.name || "-"} (${acceptTech?.phone})`,
+//         //         `ผู้จบงาน:     ${completeTech?.name || "-"} (${completeTech?.phone})`
+//         //     ].join("\n")
+//         // }
+
+//         const technicianBoxes = []
+
+//         if (
+//             fullRepair.technicianUserId &&
+//             fullRepair.techCompleteUserId &&
+//             fullRepair.technicianUserId === fullRepair.techCompleteUserId
+//         ) {
+//             technicianBoxes.push({
+//                 type: "box",
+//                 layout: "baseline",
+//                 contents: [
+//                     { type: "text", text: "ผู้จบงาน :", size: "sm", flex: 2 },
+//                     { type: "text", text: `${completeTech?.name || "-"} (${completeTech?.phone})`, size: "sm", wrap: true, flex: 4 }
+//                 ]
+//             })
+//         } else {
+//             technicianBoxes.push(
+//                 {
+//                     type: "box",
+//                     layout: "baseline",
+//                     contents: [
+//                         { type: "text", text: "ผู้รับงาน :", size: "sm", flex: 2 },
+//                         { type: "text", text: `${acceptTech?.name || "-"} (${acceptTech?.phone})`, size: "sm", wrap: true, flex: 4 }
+//                     ]
+//                 },
+//                 {
+//                     type: "box",
+//                     layout: "baseline",
+//                     contents: [
+//                         { type: "text", text: "ผู้จบงาน :", size: "sm", flex: 2 },
+//                         { type: "text", text: `${completeTech?.name || "-"} (${completeTech?.phone})`, size: "sm", wrap: true, flex: 4 }
+//                     ]
+//                 }
+//             )
+//         }
+
+
+//         const buildImageContents = () => [
+//             ...(normalImages.length > 0
+//                 ? normalImages.map(url => ({
+//                     type: "image",
+//                     url,
+//                     size: "full",
+//                     aspectRatio: "16:9",
+//                     aspectMode: "cover",
+//                     margin: "md"
+//                 }))
+//                 : []),
+//             ...(signatureImage
+//                 ? [
+//                     { type: "text", text: "ลายเซ็น", size: "sm", margin: "md" },
+//                     {
+//                         type: "image",
+//                         url: signatureImage,
+//                         size: "full",
+//                         aspectRatio: "16:9",
+//                         aspectMode: "cover",
+//                         margin: "md"
+//                     }
+//                 ]
+//                 : [])
+//         ]
+
+//         const messageToCustomer = {
+//             type: "flex",
+//             altText: "📌 งานซ่อมของคุณเสร็จเรียบร้อยแล้ว",
+//             contents: {
+//                 type: "bubble",
+//                 body: {
+//                     type: "box",
+//                     layout: "vertical",
+//                     contents: [
+//                         { type: "text", text: "อัพเดทสถานะแจ้งซ่อม", weight: "bold", size: "lg", color: "#837958" },
+//                         {
+//                             type: "box",
+//                             layout: "baseline",
+//                             contents: [
+//                                 { type: "text", text: `หมายเลขงาน :`, size: "sm", flex: 2 },
+//                                 { type: "text", text: `${jobNo}`, size: "sm", wrap: true, flex: 4 },
+//                             ]
+//                         },
+//                         {
+//                             type: "box",
+//                             layout: "baseline",
+//                             contents: [
+//                                 { type: "text", text: `วันที่แจ้ง :`, size: "sm", flex: 2 },
+//                                 { type: "text", text: `${createTime}`, size: "sm", flex: 4 },
+//                             ]
+//                         },
+//                         ...(parsedPreworkDate ? [
+//                             {
+//                                 type: "box",
+//                                 layout: "baseline",
+//                                 contents: [
+//                                     { type: "text", text: `วันนัดเข้าซ่อม:`, size: "sm", flex: 2 },
+//                                     {
+//                                         type: "text",
+//                                         text: `${moment(parsedPreworkDate).locale("th").add(543, "year").format("D MMM")} ${moment(parsedPreworkDate).locale("th").format("YYYY").slice(-2)} เวลา ${moment(parsedPreworkDate).format("HH:mm")} น.`,
+//                                         size: "sm",
+//                                         flex: 4
+//                                     }
+//                                 ]
+//                             }
+//                         ] : []),
+//                         {
+//                             type: "box",
+//                             layout: "baseline",
+//                             contents: [
+//                                 { type: "text", text: `วันที่เสร็จสิ้น :`, size: "sm", flex: 2 },
+//                                 { type: "text", text: `${completeTime}`, size: "sm", flex: 4 },
+//                             ]
+//                         },
+//                         // { type: "text", text: `บริษัท: ${fullRepair.company.companyName}`, size: "sm", wrap: true },
+//                         // { type: "text", text: `อาคาร: ${fullRepair.building.buildingName}`, size: "sm", wrap: true },
+//                         // { type: "text", text: `สถานที่: ${fullRepair.unit.unitName}`, size: "sm", wrap: true },
+//                         // { type: "text", text: `ผู้แจ้ง: ${fullRepair.customer?.name || "-"}`, size: "sm", wrap: true },
+//                         // {
+//                         //     type: "box",
+//                         //     layout: "baseline",
+//                         //     contents: [
+//                         //         { type: "text", text: technicianBoxes, size: "sm", wrap: true, flex: 2 },
+//                         //     ]
+//                         // },
+//                         ...technicianBoxes,
+//                         {
+//                             type: "box",
+//                             layout: "baseline",
+//                             contents: [
+//                                 { type: "text", text: `รายละเอียด :`, size: "sm", flex: 2 },
+//                                 { type: "text", text: `${actionDetail || "-"}`, size: "sm", wrap: true, flex: 4 },
+//                             ]
+//                         },
+//                         {
+//                             type: "box",
+//                             layout: "baseline",
+//                             contents: [
+//                                 { type: "text", text: `สถานะ :`, size: "sm", color: "#00B900", flex: 2 },
+//                                 { type: "text", text: `เสร็จสิ้น`, size: "sm", wrap: true, color: "#00B900", flex: 4 },
+//                             ]
+//                         },
+//                         // ...(imageUrls.length > 0
+//                         //     ? imageUrls.map(url => ({
+//                         //         type: "image",
+//                         //         url,
+//                         //         size: "full",
+//                         //         aspectRatio: "16:9",
+//                         //         aspectMode: "cover",
+//                         //         margin: "md"
+//                         //     }))
+//                         //     : [])
+
+//                         // ...(imageUrls.length > 0
+//                         //   ? [
+//                         //     ...imageUrls.slice(0, -1).map(url => ({
+//                         //       type: "image",
+//                         //     url,
+//                         //   size: "full",
+//                         //   aspectRatio: "16:9",
+//                         //    aspectMode: "cover",
+//                         //   margin: "md"
+//                         //  })),
+//                         //  {
+//                         //    type: "text",
+//                         //    text: "ลายเซ็น",
+//                         //    size: "sm",
+//                         // weight: "bold",
+//                         //    margin: "md"
+//                         //  },
+//                         //  {
+//                         //    type: "image",
+//                         //    url: imageUrls[imageUrls.length - 1],
+//                         //    size: "full",
+//                         //    aspectRatio: "16:9",
+//                         //    aspectMode: "cover",
+//                         //     margin: "md"
+//                         //  }
+//                         //  ]
+//                         //   : [])
+//                         ...buildImageContents()
+
+//                     ]
+//                 }
+//             }
+//         }
+
+//         const messageToGroup = {
+//             type: "flex",
+//             altText: "✅ งานซ่อมเสร็จแล้ว",
+//             contents: {
+//                 type: "bubble",
+//                 body: {
+//                     type: "box",
+//                     layout: "vertical",
+//                     contents: [
+//                         { type: "text", text: "อัพเดทสถานะงานซ่อม", weight: "bold", size: "lg", color: "#837958" },
+//                         {
+//                             type: "box",
+//                             layout: "baseline",
+//                             contents: [
+//                                 { type: "text", text: `หมายเลขงาน :`, size: "sm", flex: 2 },
+//                                 { type: "text", text: `${jobNo}`, size: "sm", wrap: true, flex: 4 },
+//                             ]
+//                         },
+//                         {
+//                             type: "box",
+//                             layout: "baseline",
+//                             contents: [
+//                                 { type: "text", text: `วันที่แจ้ง :`, size: "sm", flex: 2 },
+//                                 { type: "text", text: `${createTime}`, size: "sm", flex: 4 },
+//                             ]
+//                         },
+//                         ...(parsedPreworkDate ? [
+//                             {
+//                                 type: "box",
+//                                 layout: "baseline",
+//                                 contents: [
+//                                     { type: "text", text: `วันนัดเข้าซ่อม:`, size: "sm", flex: 2 },
+//                                     {
+//                                         type: "text",
+//                                         text: `${moment(parsedPreworkDate).locale("th").add(543, "year").format("D MMM")} ${moment(parsedPreworkDate).locale("th").format("YYYY").slice(-2)} เวลา ${moment(parsedPreworkDate).format("HH:mm")} น.`,
+//                                         size: "sm",
+//                                         flex: 4
+//                                     }
+//                                 ]
+//                             }
+//                         ] : []),
+//                         {
+//                             type: "box",
+//                             layout: "baseline",
+//                             contents: [
+//                                 { type: "text", text: `วันที่เสร็จ :`, size: "sm", flex: 2 },
+//                                 { type: "text", text: `${completeTime}`, size: "sm", flex: 4 },
+//                             ]
+//                         },
+//                         {
+//                             type: "box",
+//                             layout: "baseline",
+//                             contents: [
+//                                 { type: "text", text: `บริษัท :`, size: "sm", flex: 2 },
+//                                 { type: "text", text: `${fullRepair.company.companyName}`, size: "sm", wrap: true, flex: 4 },
+//                             ]
+//                         },
+//                         {
+//                             type: "box",
+//                             layout: "baseline",
+//                             contents: [
+//                                 { type: "text", text: `อาคาร :`, size: "sm", flex: 2 },
+//                                 { type: "text", text: `${fullRepair.building.buildingName}, ${fullRepair.unit.unitName}`, size: "sm", wrap: true, flex: 4 },
+//                             ]
+//                         },
+//                         {
+//                             type: "box",
+//                             layout: "baseline",
+//                             contents: [
+//                                 { type: "text", text: `ชั้น :`, size: "sm", flex: 2 },
+//                                 { type: "text", text: `${fullRepair.floor || "-"}`, size: "sm", wrap: true, flex: 4 }
+//                             ]
+//                         },
+//                         // {
+//                         //     type: "box",
+//                         //     layout: "baseline",
+//                         //     contents: [
+//                         //         { type: "text", text: `สถานที่ :`, size: "sm", flex: 2 },
+//                         //         { type: "text", text: `${fullRepair.unit.unitName}`, size: "sm", wrap: true, flex: 4 },
+//                         //     ]
+//                         // },
+//                         {
+//                             type: "box",
+//                             layout: "baseline",
+//                             contents: [
+//                                 { type: "text", text: `ผู้แจ้ง :`, size: "sm", flex: 2 },
+//                                 { type: "text", text: `${reporterName || "-"} (${reporterPhone || "-"})`, size: "sm", wrap: true, flex: 4 },
+//                             ]
+//                         },
+//                         // {
+//                         //     type: "box",
+//                         //     layout: "baseline",
+//                         //     contents: [
+//                         //         { type: "text", text: technicianBoxes, size: "sm", wrap: true, color: "#666666", flex: 2 },
+//                         //     ]
+//                         // },
+//                         ...technicianBoxes,
+//                         {
+//                             type: "box",
+//                             layout: "baseline",
+//                             contents: [
+//                                 { type: "text", text: `รายละเอียด :`, size: "sm", flex: 2 },
+//                                 { type: "text", text: `${actionDetail || "-"}`, size: "sm", wrap: true, flex: 4 },
+//                             ]
+//                         },
+//                         {
+//                             type: "box",
+//                             layout: "baseline",
+//                             contents: [
+//                                 { type: "text", text: `สถานะ :`, size: "sm", color: "#00B900", flex: 2 },
+//                                 { type: "text", text: `เสร็จสิ้น`, size: "sm", wrap: true, color: "#00B900", flex: 4 },
+//                             ]
+//                         },
+//                         // ...(imageUrls.length > 0
+//                         //     ? imageUrls.map(url => ({
+//                         //         type: "image",
+//                         //         url,
+//                         //         size: "full",
+//                         //         aspectRatio: "16:9",
+//                         //         aspectMode: "cover",
+//                         //         margin: "md"
+//                         //     }))
+//                         //     : [])
+
+//                         // ...(imageUrls.length > 0
+//                         //     ? [
+//                         //         ...imageUrls.slice(0, -1).map(url => ({
+//                         //             type: "image",
+//                         //             url,
+//                         //             size: "full",
+//                         //             aspectRatio: "16:9",
+//                         //             aspectMode: "cover",
+//                         //             margin: "md"
+//                         //         })),
+//                         //         {
+//                         //             type: "text",
+//                         //             text: "ลายเซ็น",
+//                         //             size: "sm",
+//                         // weight: "bold",
+//                         //             margin: "md"
+//                         //         },
+//                         //         {
+//                         //              type: "image",
+//                         //              url: imageUrls[imageUrls.length - 1],
+//                         //              size: "full",
+//                         //              aspectRatio: "16:9",
+//                         //               aspectMode: "cover",
+//                         //               margin: "md"
+//                         //           }
+//                         //       ]
+//                         //       : [])
+
+//                         ...buildImageContents()
+
+//                     ]
+//                 }
+//             }
+//         }
+
+//         let customerNotified = false
+
+//         // ✅ ส่งให้ลูกค้าหรือทุกคนในบริษัท
+//         if (fullRepair.customerUserId && fullRepair.customerUserId.trim() !== "") {
+//             await sendLineNotify(fullRepair.customerUserId, messageToCustomer)
+//             customerNotified = true
+//         } else if (fullRepair.companyName && fullRepair.companyName.trim() !== "") {
+//             const customers = await prisma.customer.findMany({
+//                 where: {
+//                     unit: {
+//                         company: {
+//                             companyName: {
+//                                 equals: fullRepair.companyName.trim(),
+//                                 mode: 'insensitive'
+//                             }
+//                         }
+//                     }
+//                 },
+//                 select: {
+//                     userId: true
+//                 }
+//             })
+
+//             const validUsers = customers.map(c => c.userId).filter(uid => !!uid)
+//             if (validUsers.length > 0) {
+//                 for (const uid of validUsers) {
+//                     await sendLineNotify(uid, messageToCustomer)
+//                 }
+//                 customerNotified = true
+//             }
+
+//             // for (const user of customers) {
+//             //    if (user.userId) {
+//             //        await sendLineNotify(user.userId, messageToCustomer)
+//             //    }
+//             //  }
+//         }
+
+//         // 👉 ถ้าไม่มีลูกค้าเลย → ส่งเข้ากลุ่มเท่านั้น
+//         if (!customerNotified && fullRepair.building.groupId) {
+//             await sendLineNotify(fullRepair.building.groupId, messageToGroup)
+//         }
+
+//         // 👉 ถ้ามีลูกค้าแล้ว → ส่งลูกค้าเสร็จ ก็ส่ง group ด้วย (เพื่อให้ช่างเห็นด้วย)
+//         if (customerNotified && fullRepair.building.groupId) {
+//             await sendLineNotify(fullRepair.building.groupId, messageToGroup)
+//         }
+
+//         //  await sendLineNotify(fullRepair.building.groupId, messageToGroup)
+
+//         return res.json({
+//             message: 'บันทึกงานเสร็จสมบูรณ์และส่งแจ้งเตือนแล้ว',
+//             data: updateRepair
+//         })
+
+//     } catch (error) {
+//         console.error(error)
+//         res.status(500).json({ message: "Server Error" })
+//     }
+// }
+
 exports.completeRepair = async (req, res) => {
     try {
-        const { id, actionDetail, workStar, techCompleteUserId } = req.body
+        const { id, actionDetail, workStar, techCompleteUserId, isDraft } = req.body;
+        console.log(isDraft)
 
-        const protocol = req.headers['x-forwarded-proto'] || req.protocol
-        const imageUrls = (req.files || []).map(file => {
-            return `${protocol}://${req.get('host')}/uploads/${file.filename}`
-        })
+        // 🔹 แปลงค่าเป็น Boolean จริง ๆ
+        const isDraftBool = (isDraft === true || isDraft === "true");
+
+        console.log("isDraft raw:", isDraft, " -> isDraftBool:", isDraftBool);
+
+        const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+        const host = req.get('host');
+
+        // แยกรูปงานกับลายเซ็น
+        let normalImages = [];
+        let signatureImage = null;
+
+        for (const file of req.files || []) {
+            const url = `${protocol}://${host}/uploads/${file.filename}`;
+            console.log("✅ Image URL generated:", url);
+
+            if (file.filename.toLowerCase().includes("signature")) {
+                signatureImage = url;
+            } else {
+                normalImages.push(url);
+            }
+        }
 
         const repair = await prisma.repair.findFirst({
             where: { id: Number(id) },
             select: { createDate: true, status: true, isDraft: true }
-        })
+        });
 
-        if (!repair?.createDate) {
-            return res.status(400).json({ error: "ไม่พบเวลาแจ้งงาน" })
+        if (!repair?.createDate) return res.status(400).json({ error: "ไม่พบเวลาแจ้งงาน" });
+
+        if (repair.status === 'completed' && repair.isDraft === false && !isDraft) {
+            return res.status(400).json({ message: 'งานนี้ถูกจบแล้ว ไม่สามารถจบซ้ำได้' });
         }
 
-        if (repair.status === 'completed' && repair.isDraft === false) {
-            return res.status(400).json({ message: 'งานนี้ถูกจบแล้ว ไม่สามารถจบซ้ำได้' })
-        }
-
-        const completeDate = moment().tz("Asia/Bangkok").toDate()
+        const completeDateNow = moment().tz("Asia/Bangkok").toDate();
         const totalMinutes = Math.floor(
-            (completeDate.getTime() - new Date(repair.createDate).getTime()) / (1000 * 60)
-        )
+            (completeDateNow.getTime() - new Date(repair.createDate).getTime()) / (1000 * 60)
+        );
+
+        let updateData = {
+            actionDetail,
+            workStar: Number(workStar),
+            techCompleteUserId,
+            images: {
+                create: [...normalImages, signatureImage].filter(Boolean).map(url => ({
+                    url,
+                    uploadBy: 'tech'
+                }))
+            }
+        };
+
+        if (isDraftBool) {
+            updateData.status = 'completed'
+            updateData.isDraft = true;
+            updateData.draftDate = completeDateNow;
+        } else {
+            updateData.status = 'completed';
+            updateData.isDraft = false;
+            updateData.completeDate = completeDateNow;
+            updateData.totalTime = totalMinutes;
+        }
 
         const updateRepair = await prisma.repair.update({
             where: { id: Number(id) },
-            data: {
-                status: 'completed',
-                isDraft: false,
-                completeDate,
-                totalTime: totalMinutes,
-                actionDetail,
-                workStar: Number(workStar),
-                techCompleteUserId,
-                images: {
-                    create: imageUrls.map(url => ({
-                        url,
-                        uploadBy: 'tech'
-                    }))
-                }
-            }
-        })
+            data: updateData
+        });
 
         const fullRepair = await prisma.repair.findFirst({
             where: { id: Number(id) },
-            include: {
-                company: true,
-                building: true,
-                unit: true,
-                customer: true
-            }
-        })
+            include: { company: true, building: true, unit: true, customer: true }
+        });
 
-        const jobNo = fullRepair.jobNo || `#${fullRepair.id}`
-        // const createTime = moment(fullRepair.createDate).local("th").format("D MMM YY HH:mm") + " น. "
-        // const completeTime = moment(completeDate).locale("th").format("D MMM YY HH:mm") + " น."
+        const jobNo = fullRepair.jobNo || `#${fullRepair.id}`;
 
         const createMoment = moment(fullRepair.createDate).tz("Asia/Bangkok").locale("th");
-        const completeMoment = moment(completeDate).tz("Asia/Bangkok").locale("th");
+        const completeMoment = moment(completeDateNow).tz("Asia/Bangkok").locale("th");
 
         const createYear = (createMoment.year() + 543).toString().slice(-2);
         const completeYear = (completeMoment.year() + 543).toString().slice(-2);
@@ -1789,7 +2872,7 @@ exports.completeRepair = async (req, res) => {
         const createTime = `${createMoment.format("D MMM")} ${createYear} เวลา ${createMoment.format("HH:mm")} น.`;
         const completeTime = `${completeMoment.format("D MMM")} ${completeYear} เวลา ${completeMoment.format("HH:mm")} น.`;
 
-        const parsedPreworkDate = updateRepair.preworkDate ? new Date(updateRepair.preworkDate) : null
+        const parsedPreworkDate = updateRepair.preworkDate ? new Date(updateRepair.preworkDate) : null;
 
         const [acceptTech, completeTech] = await Promise.all([
             fullRepair.technicianUserId
@@ -1798,29 +2881,22 @@ exports.completeRepair = async (req, res) => {
             fullRepair.techCompleteUserId
                 ? prisma.technician.findUnique({ where: { userId: fullRepair.techCompleteUserId } })
                 : null
-        ])
+        ]);
 
-        // let technicianText = ""
-        // if (
-        //     fullRepair.technicianUserId &&
-        //     fullRepair.techCompleteUserId &&
-        //     fullRepair.technicianUserId === fullRepair.techCompleteUserId
-        // ) {
-        //     technicianText = `ผู้จบงาน:     ${completeTech?.name || "-"} (${completeTech?.phone})`
-        // } else {
-        //     technicianText = [
-        //         `ผู้รับงาน:     ${acceptTech?.name || "-"} (${acceptTech?.phone})`,
-        //         `ผู้จบงาน:     ${completeTech?.name || "-"} (${completeTech?.phone})`
-        //     ].join("\n")
-        // }
+        let reporterName = "-", reporterPhone = "-";
+        if (fullRepair.customer) {
+            reporterName = fullRepair.customer.name || "-";
+            reporterPhone = fullRepair.customer.phone || "-";
+        } else if (fullRepair.ownerId) {
+            const ownerTech = await prisma.technician.findFirst({ where: { userId: fullRepair.ownerId } });
+            if (ownerTech) {
+                reporterName = ownerTech.name || "-";
+                reporterPhone = ownerTech.phone || "-";
+            }
+        }
 
-        const technicianBoxes = []
-
-        if (
-            fullRepair.technicianUserId &&
-            fullRepair.techCompleteUserId &&
-            fullRepair.technicianUserId === fullRepair.techCompleteUserId
-        ) {
+        const technicianBoxes = [];
+        if (fullRepair.technicianUserId && fullRepair.techCompleteUserId && fullRepair.technicianUserId === fullRepair.techCompleteUserId) {
             technicianBoxes.push({
                 type: "box",
                 layout: "baseline",
@@ -1828,7 +2904,7 @@ exports.completeRepair = async (req, res) => {
                     { type: "text", text: "ผู้จบงาน :", size: "sm", flex: 2 },
                     { type: "text", text: `${completeTech?.name || "-"} (${completeTech?.phone})`, size: "sm", wrap: true, flex: 4 }
                 ]
-            })
+            });
         } else {
             technicianBoxes.push(
                 {
@@ -1844,12 +2920,32 @@ exports.completeRepair = async (req, res) => {
                     layout: "baseline",
                     contents: [
                         { type: "text", text: "ผู้จบงาน :", size: "sm", flex: 2 },
-                        { type: "text", text: `${completeTech?.name || "-"} (${completeTech?.phone})`, size: "sm", wrap: true, flex: 4 }
+                        { type: "text", text: `${completeTech?.name || "-"} (${completeTech?.phone || "-"})`, size: "sm", wrap: true, flex: 4 }
                     ]
                 }
-            )
+            );
         }
 
+        const buildImageContents = () => [
+            ...(normalImages.length > 0
+                ? normalImages.map(url => ({
+                    type: "image",
+                    url,
+                    size: "full",
+                    aspectRatio: "16:9",
+                    aspectMode: "cover",
+                    margin: "md"
+                }))
+                : []),
+            ...(signatureImage
+                ? [
+                    { type: "text", text: "ลายเซ็น", size: "sm", margin: "md" },
+                    { type: "image", url: signatureImage, size: "full", aspectRatio: "16:9", aspectMode: "cover", margin: "md" }
+                ]
+                : [])
+        ];
+
+        // ✅ สร้าง Flex Message ลูกค้า
         const messageToCustomer = {
             type: "flex",
             altText: "📌 งานซ่อมของคุณเสร็จเรียบร้อยแล้ว",
@@ -1860,305 +2956,57 @@ exports.completeRepair = async (req, res) => {
                     layout: "vertical",
                     contents: [
                         { type: "text", text: "อัพเดทสถานะแจ้งซ่อม", weight: "bold", size: "lg", color: "#837958" },
-                        {
-                            type: "box",
-                            layout: "baseline",
-                            contents: [
-                                { type: "text", text: `หมายเลขงาน :`, size: "sm", flex: 2 },
-                                { type: "text", text: `${jobNo}`, size: "sm", wrap: true, flex: 4 },
-                            ]
-                        },
-                        {
-                            type: "box",
-                            layout: "baseline",
-                            contents: [
-                                { type: "text", text: `วันที่แจ้ง :`, size: "sm", flex: 2 },
-                                { type: "text", text: `${createTime}`, size: "sm", flex: 4 },
-                            ]
-                        },
-                        ...(parsedPreworkDate ? [
-                            {
-                                type: "box",
-                                layout: "baseline",
-                                contents: [
-                                    { type: "text", text: `วันนัดเข้าซ่อม:`, size: "sm", flex: 2 },
-                                    {
-                                        type: "text",
-                                        text: `${moment(parsedPreworkDate).locale("th").add(543, "year").format("D MMM")} ${moment(parsedPreworkDate).locale("th").format("YYYY").slice(-2)} เวลา ${moment(parsedPreworkDate).format("HH:mm")} น.`,
-                                        size: "sm",
-                                        flex: 4
-                                    }
-                                ]
-                            }
-                        ] : []),
-                        {
-                            type: "box",
-                            layout: "baseline",
-                            contents: [
-                                { type: "text", text: `วันที่เสร็จสิ้น :`, size: "sm", flex: 2 },
-                                { type: "text", text: `${completeTime}`, size: "sm", flex: 4 },
-                            ]
-                        },
-                        // { type: "text", text: `บริษัท: ${fullRepair.company.companyName}`, size: "sm", wrap: true },
-                        // { type: "text", text: `อาคาร: ${fullRepair.building.buildingName}`, size: "sm", wrap: true },
-                        // { type: "text", text: `สถานที่: ${fullRepair.unit.unitName}`, size: "sm", wrap: true },
-                        // { type: "text", text: `ผู้แจ้ง: ${fullRepair.customer?.name || "-"}`, size: "sm", wrap: true },
-                        // {
-                        //     type: "box",
-                        //     layout: "baseline",
-                        //     contents: [
-                        //         { type: "text", text: technicianBoxes, size: "sm", wrap: true, flex: 2 },
-                        //     ]
-                        // },
+                        { type: "box", layout: "baseline", contents: [{ type: "text", text: "หมายเลขงาน :", size: "sm", flex: 2 }, { type: "text", text: `${jobNo}`, size: "sm", wrap: true, flex: 4 }] },
+                        { type: "box", layout: "baseline", contents: [{ type: "text", text: "วันที่แจ้ง :", size: "sm", flex: 2 }, { type: "text", text: `${createTime}`, size: "sm", flex: 4 }] },
+                        ...(parsedPreworkDate ? [{ type: "box", layout: "baseline", contents: [{ type: "text", text: "วันนัดเข้าซ่อม:", size: "sm", flex: 2 }, { type: "text", text: `${moment(parsedPreworkDate).locale("th").add(543, "year").format("D MMM")} ${moment(parsedPreworkDate).locale("th").format("YYYY").slice(-2)} เวลา ${moment(parsedPreworkDate).format("HH:mm")} น.`, size: "sm", flex: 4 }] }] : []),
+                        { type: "box", layout: "baseline", contents: [{ type: "text", text: "วันที่เสร็จสิ้น :", size: "sm", flex: 2 }, { type: "text", text: `${completeTime}`, size: "sm", flex: 4 }] },
+                        { type: "box", layout: "baseline", contents: [{ type: "text", text: "บริษัท :", size: "sm", flex: 2 }, { type: "text", text: `${fullRepair.company.companyName}`, size: "sm", wrap: true, flex: 4 }] },
+                        { type: "box", layout: "baseline", contents: [{ type: "text", text: "อาคาร :", size: "sm", flex: 2 }, { type: "text", text: `${fullRepair.building.buildingName}, ${fullRepair.unit.unitName}`, size: "sm", wrap: true, flex: 4 }] },
+                        { type: "box", layout: "baseline", contents: [{ type: "text", text: "ชั้น :", size: "sm", flex: 2 }, { type: "text", text: `${fullRepair.floor || "-"}`, size: "sm", wrap: true, flex: 4 }] },
+                        { type: "box", layout: "baseline", contents: [{ type: "text", text: "ผู้แจ้ง :", size: "sm", flex: 2 }, { type: "text", text: `${reporterName || "-"} (${reporterPhone || "-"})`, size: "sm", wrap: true, flex: 4 }] },
                         ...technicianBoxes,
-                        {
-                            type: "box",
-                            layout: "baseline",
-                            contents: [
-                                { type: "text", text: `รายละเอียด :`, size: "sm", flex: 2 },
-                                { type: "text", text: `${actionDetail || "-"}`, size: "sm", wrap: true, flex: 4 },
-                            ]
-                        },
-                        {
-                            type: "box",
-                            layout: "baseline",
-                            contents: [
-                                { type: "text", text: `สถานะ :`, size: "sm", color: "#00B900", flex: 2 },
-                                { type: "text", text: `เสร็จสิ้น`, size: "sm", wrap: true, color: "#00B900", flex: 4 },
-                            ]
-                        },
-                        // ...(imageUrls.length > 0
-                        //     ? imageUrls.map(url => ({
-                        //         type: "image",
-                        //         url,
-                        //         size: "full",
-                        //         aspectRatio: "16:9",
-                        //         aspectMode: "cover",
-                        //         margin: "md"
-                        //     }))
-                        //     : [])
-
-                        ...(imageUrls.length > 0
-                            ? [
-                                ...imageUrls.slice(0, -1).map(url => ({
-                                    type: "image",
-                                    url,
-                                    size: "full",
-                                    aspectRatio: "16:9",
-                                    aspectMode: "cover",
-                                    margin: "md"
-                                })),
-                                {
-                                    type: "text",
-                                    text: "ลายเซ็น",
-                                    size: "sm",
-                                    // weight: "bold",
-                                    margin: "md"
-                                },
-                                {
-                                    type: "image",
-                                    url: imageUrls[imageUrls.length - 1],
-                                    size: "full",
-                                    aspectRatio: "16:9",
-                                    aspectMode: "cover",
-                                    margin: "md"
-                                }
-                            ]
-                            : [])
-
+                        { type: "box", layout: "baseline", contents: [{ type: "text", text: "รายละเอียด :", size: "sm", flex: 2 }, { type: "text", text: `${actionDetail || "-"}`, size: "sm", wrap: true, flex: 4 }] },
+                        { type: "box", layout: "baseline", contents: [{ type: "text", text: "สถานะ :", size: "sm", color: "#00B900", flex: 2 }, { type: "text", text: isDraft ? "เสร็จสิ้น" : "เสร็จสิ้น", size: "sm", wrap: true, color: "#00B900", flex: 4 }] },
+                        ...buildImageContents()
                     ]
                 }
             }
-        }
+        };
 
-        const messageToGroup = {
-            type: "flex",
-            altText: "✅ งานซ่อมเสร็จแล้ว",
-            contents: {
-                type: "bubble",
-                body: {
-                    type: "box",
-                    layout: "vertical",
-                    contents: [
-                        { type: "text", text: "อัพเดทสถานะงานซ่อม", weight: "bold", size: "lg", color: "#837958" },
-                        {
-                            type: "box",
-                            layout: "baseline",
-                            contents: [
-                                { type: "text", text: `หมายเลขงาน :`, size: "sm", flex: 2 },
-                                { type: "text", text: `${jobNo}`, size: "sm", wrap: true, flex: 4 },
-                            ]
-                        },
-                        {
-                            type: "box",
-                            layout: "baseline",
-                            contents: [
-                                { type: "text", text: `วันที่แจ้ง :`, size: "sm", flex: 2 },
-                                { type: "text", text: `${createTime}`, size: "sm", flex: 4 },
-                            ]
-                        },
-                        ...(parsedPreworkDate ? [
-                            {
-                                type: "box",
-                                layout: "baseline",
-                                contents: [
-                                    { type: "text", text: `วันนัดเข้าซ่อม:`, size: "sm", flex: 2 },
-                                    {
-                                        type: "text",
-                                        text: `${moment(parsedPreworkDate).locale("th").add(543, "year").format("D MMM")} ${moment(parsedPreworkDate).locale("th").format("YYYY").slice(-2)} เวลา ${moment(parsedPreworkDate).format("HH:mm")} น.`,
-                                        size: "sm",
-                                        flex: 4
-                                    }
-                                ]
-                            }
-                        ] : []),
-                        {
-                            type: "box",
-                            layout: "baseline",
-                            contents: [
-                                { type: "text", text: `วันที่เสร็จ :`, size: "sm", flex: 2 },
-                                { type: "text", text: `${completeTime}`, size: "sm", flex: 4 },
-                            ]
-                        },
-                        {
-                            type: "box",
-                            layout: "baseline",
-                            contents: [
-                                { type: "text", text: `บริษัท :`, size: "sm", flex: 2 },
-                                { type: "text", text: `${fullRepair.company.companyName}`, size: "sm", wrap: true, flex: 4 },
-                            ]
-                        },
-                        {
-                            type: "box",
-                            layout: "baseline",
-                            contents: [
-                                { type: "text", text: `อาคาร :`, size: "sm", flex: 2 },
-                                { type: "text", text: `${fullRepair.building.buildingName}, ${fullRepair.unit.unitName}`, size: "sm", wrap: true, flex: 4 },
-                            ]
-                        },
-                        // {
-                        //     type: "box",
-                        //     layout: "baseline",
-                        //     contents: [
-                        //         { type: "text", text: `สถานที่ :`, size: "sm", flex: 2 },
-                        //         { type: "text", text: `${fullRepair.unit.unitName}`, size: "sm", wrap: true, flex: 4 },
-                        //     ]
-                        // },
-                        {
-                            type: "box",
-                            layout: "baseline",
-                            contents: [
-                                { type: "text", text: `ผู้แจ้ง :`, size: "sm", flex: 2 },
-                                { type: "text", text: `${fullRepair.customer?.name || "-"} (${fullRepair.customer?.phone || "-"})`, size: "sm", wrap: true, flex: 4 },
-                            ]
-                        },
-                        // {
-                        //     type: "box",
-                        //     layout: "baseline",
-                        //     contents: [
-                        //         { type: "text", text: technicianBoxes, size: "sm", wrap: true, color: "#666666", flex: 2 },
-                        //     ]
-                        // },
-                        ...technicianBoxes,
-                        {
-                            type: "box",
-                            layout: "baseline",
-                            contents: [
-                                { type: "text", text: `รายละเอียด :`, size: "sm", flex: 2 },
-                                { type: "text", text: `${actionDetail || "-"}`, size: "sm", wrap: true, flex: 4 },
-                            ]
-                        },
-                        {
-                            type: "box",
-                            layout: "baseline",
-                            contents: [
-                                { type: "text", text: `สถานะ :`, size: "sm", color: "#00B900", flex: 2 },
-                                { type: "text", text: `เสร็จสิ้น`, size: "sm", wrap: true, color: "#00B900", flex: 4 },
-                            ]
-                        },
-                        // ...(imageUrls.length > 0
-                        //     ? imageUrls.map(url => ({
-                        //         type: "image",
-                        //         url,
-                        //         size: "full",
-                        //         aspectRatio: "16:9",
-                        //         aspectMode: "cover",
-                        //         margin: "md"
-                        //     }))
-                        //     : [])
+        // ❗ ไม่แก้ messageToGroup
+        const messageToGroup = fullRepair.messageToGroupContents;
 
-                        ...(imageUrls.length > 0
-                            ? [
-                                ...imageUrls.slice(0, -1).map(url => ({
-                                    type: "image",
-                                    url,
-                                    size: "full",
-                                    aspectRatio: "16:9",
-                                    aspectMode: "cover",
-                                    margin: "md"
-                                })),
-                                {
-                                    type: "text",
-                                    text: "ลายเซ็น",
-                                    size: "sm",
-                                    // weight: "bold",
-                                    margin: "md"
-                                },
-                                {
-                                    type: "image",
-                                    url: imageUrls[imageUrls.length - 1],
-                                    size: "full",
-                                    aspectRatio: "16:9",
-                                    aspectMode: "cover",
-                                    margin: "md"
-                                }
-                            ]
-                            : [])
-
-                    ]
-                }
-            }
-        }
-
-        // ✅ ส่งให้ลูกค้าหรือทุกคนในบริษัท
+        let customerNotified = false;
         if (fullRepair.customerUserId && fullRepair.customerUserId.trim() !== "") {
-            await sendLineNotify(fullRepair.customerUserId, messageToCustomer)
+            await sendLineNotify(fullRepair.customerUserId, messageToCustomer);
+            customerNotified = true;
         } else if (fullRepair.companyName && fullRepair.companyName.trim() !== "") {
             const customers = await prisma.customer.findMany({
-                where: {
-                    unit: {
-                        company: {
-                            companyName: {
-                                equals: fullRepair.companyName.trim(),
-                                mode: 'insensitive'
-                            }
-                        }
-                    }
-                },
-                select: {
-                    userId: true
-                }
-            })
+                where: { unit: { company: { companyName: { equals: fullRepair.companyName.trim(), mode: 'insensitive' } } } },
+                select: { userId: true }
+            });
 
             for (const user of customers) {
-                if (user.userId) {
-                    await sendLineNotify(user.userId, messageToCustomer)
-                }
+                if (user.userId) await sendLineNotify(user.userId, messageToCustomer);
             }
+            if (customers.length > 0) customerNotified = true;
         }
 
-        await sendLineNotify(fullRepair.building.groupId, messageToGroup)
+        if (fullRepair.building.groupId) {
+            await sendLineNotify(fullRepair.building.groupId, messageToCustomer);
+        }
 
         return res.json({
             message: 'บันทึกงานเสร็จสมบูรณ์และส่งแจ้งเตือนแล้ว',
             data: updateRepair
-        })
+        });
 
     } catch (error) {
-        console.error(error)
-        res.status(500).json({ message: "Server Error" })
+        console.error(error);
+        res.status(500).json({ message: "Server Error" });
     }
-}
+};
+
 
 exports.getRelatedByUnit = async (req, res) => {
     const { unitName } = req.params;
@@ -2372,6 +3220,19 @@ exports.getTechnicianReport = async (req, res) => {
             };
         }
 
+        // เพิ่ม filter ใหม่สำหรับ createdAt
+        let createdAtFilter = {};
+        if (startDate && endDate) {
+            const start = new Date(`${startDate}T00:00:00.000Z`);
+            const end = new Date(`${endDate}T23:59:59.999Z`);
+            createdAtFilter = {
+                createDate: {
+                    gte: start,
+                    lte: end,
+                },
+            };
+        }
+
         // 1. Group by งานที่จบ (techCompleteUserId)
         const completedJobs = await prisma.repair.groupBy({
             by: ['techCompleteUserId'],
@@ -2405,11 +3266,14 @@ exports.getTechnicianReport = async (req, res) => {
             where: {
                 ...dateFilter,
                 OR: [
+                    // {  ownerId: { not: null } },
                     { techAcceptUserId: { not: null } },
                     { techCompleteUserId: { not: null } },
                 ],
+                // status: { in: ['completed', 'in_progress', 'pending'] },
             },
             select: {
+                ownerId: true,
                 techAcceptUserId: true,
                 techCompleteUserId: true,
                 completeDate: true,
@@ -2417,6 +3281,70 @@ exports.getTechnicianReport = async (req, res) => {
                 workStar: true,
             },
         });
+
+        // ดึงงานค้าง (pending, in_progress) ในช่วงเวลา
+        // const unfinishedRepairs = await prisma.repair.findMany({
+        //     where: {
+        //         status: { in: ['pending', 'in_progress'] },
+        //         ...createdAtFilter,   // ✅ กรองตามช่วงเวลา
+        //         OR: [
+        //             { techAcceptUserId: { not: null } },
+        //             { ownerId: { not: null } },
+        //         ],
+        //     },
+        //     select: {
+        //         ownerId: true,
+        //         techAcceptUserId: true,
+        //         status: true,
+        //         completeDate: true,
+        //     },
+        // });
+
+        const unfinishedRepairs = await prisma.repair.findMany({
+            where: {
+                status: { in: ['pending', 'in_progress'] },
+                OR: [
+                    // งานที่สร้างเองในช่วงเวลาสร้าง
+                    {
+                        ownerId: { not: null },
+                        createDate: {
+                            gte: new Date(`${startDate}T00:00:00.000Z`),
+                            lte: new Date(`${endDate}T23:59:59.999Z`),
+                        },
+                    },
+                    // งานที่รับงานในช่วงเวลารับ
+                    {
+                        techAcceptUserId: { not: null },
+                        acceptDate: {
+                            gte: new Date(`${startDate}T00:00:00.000Z`),
+                            lte: new Date(`${endDate}T23:59:59.999Z`),
+                        },
+                    },
+                ],
+            },
+            select: {
+                ownerId: true,
+                techAcceptUserId: true,
+                status: true,
+                createDate: true,
+                acceptDate: true,
+            },
+        });
+
+        // ดึงงานที่สร้างเอง (ownerId) ตามช่วงเวลา
+        const ownerRepairs = await prisma.repair.findMany({
+            where: {
+                ownerId: { not: null },
+                ...createdAtFilter,  // ✅ ใส่ช่วงเวลา
+            },
+            select: {
+                ownerId: true,
+                status: true,
+                completeDate: true,
+            },
+        });
+
+
 
         // 4. ดึงรายชื่อช่างทั้งหมด
         const allTechnicians = await prisma.technician.findMany({
@@ -2474,20 +3402,67 @@ exports.getTechnicianReport = async (req, res) => {
         // 7. รวมข้อมูลรายช่าง
         const reportWithDetails = allTechnicians.map(technician => {
             const techId = technician.userId;
-            const accept = acceptedJobs.find(a => a.techAcceptUserId === techId);
+            //            const accept = acceptedJobs.find(a => a.techAcceptUserId === techId);
+            //            const complete = completedJobs.find(c => c.techCompleteUserId === techId);
+            //
+            //            const acceptedCount = accept ? accept._count._all : 0;
+            //            const completedCount = complete ? complete._count._all : 0;
+
+            //            const total = acceptedCount + (completedCount - (accept?.techAcceptUserId === complete?.techCompleteUserId ? completedCount : 0));
+            //          const successRate = total > 0 ? parseFloat(((completedCount / total) * 100).toFixed(2)) : null;
+            // A = งานที่ตัวเองรับมา
+            const A = repairs.filter(r => r.techAcceptUserId === techId).length;
+
+            // B = งานที่รับเองและจบเอง
+            const B = repairs.filter(r =>
+                r.techAcceptUserId === techId &&
+                r.techCompleteUserId === techId &&
+                r.status === 'completed'
+            ).length;
+
+            // C = งานที่เราไปจบให้คนอื่น
+            const C = repairs.filter(r =>
+                r.techAcceptUserId !== techId &&
+                r.techCompleteUserId === techId &&
+                r.status === 'completed'
+            ).length;
+
+            // D = งานที่คนอื่นเอาของเราไปจบ
+            const D = repairs.filter(r =>
+                r.techAcceptUserId === techId &&
+                r.techCompleteUserId !== techId &&
+                r.status === 'completed'
+            ).length;
+
+            // E = งานที่เราสร้างเอง (ownerId)
+            const E = ownerRepairs.filter(r => r.ownerId === techId).length;
+
+            // F = งานค้างที่เกี่ยวข้องกับเรา
+            const F = unfinishedRepairs.filter(r =>
+                r.ownerId === techId || r.techAcceptUserId === techId
+            ).length;
+
+            const denominator = A + C - D;
+            const numerator = B + C;
+
+            const successRate = denominator > 0
+                ? parseFloat(((numerator / denominator) * 100).toFixed(2))
+                : null;
+
             const complete = completedJobs.find(c => c.techCompleteUserId === techId);
 
-            const acceptedCount = accept ? accept._count._all : 0;
-            const completedCount = complete ? complete._count._all : 0;
-
-            const total = acceptedCount + (completedCount - (accept?.techAcceptUserId === complete?.techCompleteUserId ? completedCount : 0));
-            const successRate = total > 0 ? parseFloat(((completedCount / total) * 100).toFixed(2)) : null;
-
+            //const successRate = acceptedCount > 0 ? parseFloat(((completedCount / acceptedCount) * 100).toFixed(2)): null;
             return {
                 techUserId: techId,
                 technicianName: technician.name || 'Unknown',
-                acceptedJobs: acceptedCount,
-                completedJobs: completedCount,
+                //       acceptedJobs: acceptedCount,
+                //       completedJobs: completedCount,
+                acceptedJobs: A,                            // เปลี่ยนจาก acceptedCount
+                completedJobs: B + C,                       // เปลี่ยนจาก completedCoun
+                tekenFromOtherCount: C, //งานที่เราไปจบให้คนอื่น
+                takenByOtherCount: D, //งานที่คนอื่นจบให้เรา
+                ownerJobs: E, // งานที่เราสร้างเอง
+                totalUnfinishedJobs: F,
                 successRate,
                 averageStar: complete?._avg?.workStar ? parseFloat(complete._avg.workStar.toFixed(2)) : null,
                 buildings: [...new Set(technician.techBuilds.map(tb => tb.building.buildingName))],
@@ -2509,88 +3484,221 @@ exports.getTechnicianReport = async (req, res) => {
 };
 
 
+//exports.getTechReportById = async (req, res) => {
+//  try {
+//    const { userId } = req.params;
+
+// งานที่ช่างรับ
+//  const acceptRepair = await prisma.repair.findMany({
+//    where: {
+//      techAcceptUserId: userId,
+//    isDraft: false
+//  },
+//  include: {
+//    customer: true,
+//   company: true,
+//    building: true,
+//    unit: true,
+//    images: true
+//  }
+//  });
+
+// งานที่ช่างทำเสร็จ
+//  const completedRepair = await prisma.repair.findMany({
+//     where: {
+//       techCompleteUserId: userId,
+//     isDraft: false
+//  },
+//   include: {
+//     customer: true,
+//    company: true,
+//    building: true,
+//    unit: true,
+//  images: true
+//  }
+//  });
+
+// ข้อมูลช่าง + ตึกที่สังกัด (TechBuild)
+//  const technician = await prisma.technician.findUnique({
+//    where: {
+//      userId: userId
+//  },
+//   include: {
+//       techBuilds: {
+//          include: {
+//             building: true
+//       }
+//   }
+//  }
+//  });
+
+//  const acceptedCount = acceptRepair.length
+//  const completedCount = completedRepair.length
+
+//   const percentComplete = acceptedCount > 0
+//     ? Math.round((completedCount / acceptedCount) * 100)
+//   : 0;
+
+//	const validWorkStars = completedRepair
+//       .map((repair) => repair.workStar)
+//     .filter((star) => star !== null && star !== undefined);
+
+//  const totalWorkStar = validWorkStars.reduce((sum, star) => sum + star, 0);
+
+//  const averageWorkStar =
+//   validWorkStars.length > 0
+//   ? parseFloat((totalWorkStar / validWorkStars.length).toFixed(2))
+//   : 0;
+
+//	console.log(averageWorkStar);
+
+//      res.json({
+//        message: "Get tech report by id success",
+//      data: {
+//        technician: {
+//          name: technician?.name || '',
+//        phone: technician?.phone || '',
+//      role: technician?.role || '',
+//    userId: technician?.userId || '',
+//    averageWorkStar,
+//  buildings: [
+//     ...new Set(
+//       technician.techBuilds.map(tb => tb.building.buildingName)
+//   )
+//  ] || []
+//  },
+//  accepted: acceptRepair,
+//   completed: completedRepair,
+//   summary: {
+//      acceptedCount,
+//    completedCount,
+//      percentComplete
+//   }
+//  }
+//  });
+
+//  } catch (error) {
+//    console.log(error);
+//  res.status(500).json({ message: "Server Error" });
+//  }
+//};
+
 exports.getTechReportById = async (req, res) => {
     try {
         const { userId } = req.params;
+        const { startDate, endDate } = req.query;
 
-        // งานที่ช่างรับ
+        let dateFilter = {};
+        if (startDate && endDate) {
+            const start = new Date(`${startDate}T00:00:00.000Z`);
+            const end = new Date(`${endDate}T23:59:59.999Z`);
+            dateFilter = {
+                completeDate: {
+                    gte: start,
+                    lte: end,
+                },
+            };
+        }
+
+        // งานที่รับ
         const acceptRepair = await prisma.repair.findMany({
             where: {
                 techAcceptUserId: userId,
-                isDraft: false
+                isDraft: false,
+                ...dateFilter, // กรองตาม completeDate เหมือน getTechnicianReport
             },
             include: {
                 customer: true,
                 company: true,
                 building: true,
                 unit: true,
-                images: true
-            }
+                images: true,
+            },
         });
 
-        // งานที่ช่างทำเสร็จ
+        // งานที่จบ
         const completedRepair = await prisma.repair.findMany({
             where: {
                 techCompleteUserId: userId,
-                isDraft: false
+                isDraft: false,
+                status: 'completed', // ต้องเป็นงานที่จบเท่านั้น
+                ...dateFilter,
             },
             include: {
                 customer: true,
                 company: true,
                 building: true,
                 unit: true,
-                images: true
-            }
-        });
-
-        // ข้อมูลช่าง + ตึกที่สังกัด (TechBuild)
-        const technician = await prisma.technician.findUnique({
-            where: {
-                userId: userId
+                images: true,
             },
-            include: {
-                techBuilds: {
-                    include: {
-                        building: true
-                    }
-                }
-            }
         });
 
-        const acceptedCount = acceptRepair.length
-        const completedCount = completedRepair.length
+        // ค่าเฉลี่ยดาวจากงานที่จบ
+        const averageStarResult = await prisma.repair.aggregate({
+            _avg: { workStar: true },
+            where: {
+                techCompleteUserId: userId,
+                status: 'completed',
+                workStar: { not: null },
+                ...dateFilter,
+            },
+        });
 
-        const percentComplete = acceptedCount > 0
-            ? Math.round((completedCount / acceptedCount) * 100)
-            : 0;
+        const technician = await prisma.technician.findUnique({
+            where: { userId },
+            include: { techBuilds: { include: { building: true } } },
+        });
+
+        const acceptedCount = acceptRepair.length;
+        const completedCount = completedRepair.length;
+        const percentComplete =
+            acceptedCount > 0 ? Math.round((completedCount / acceptedCount) * 100) : 0;
 
         res.json({
             message: "Get tech report by id success",
             data: {
                 technician: {
-                    name: technician?.name || '',
-                    phone: technician?.phone || '',
-                    role: technician?.role || '',
-                    userId: technician?.userId || '',
-                    buildings: [
-                        ...new Set(
-                            technician.techBuilds.map(tb => tb.building.buildingName)
-                        )
-                    ] || []
+                    name: technician?.name || "",
+                    phone: technician?.phone || "",
+                    role: technician?.role || "",
+                    userId: technician?.userId || "",
+                    buildings:
+                        [...new Set(technician?.techBuilds.map((tb) => tb.building.buildingName))] || [],
                 },
                 accepted: acceptRepair,
                 completed: completedRepair,
                 summary: {
                     acceptedCount,
                     completedCount,
-                    percentComplete
-                }
-            }
+                    percentComplete,
+                    averageStar: averageStarResult._avg.workStar
+                        ? parseFloat(averageStarResult._avg.workStar.toFixed(2))
+                        : null,
+                },
+            },
         });
-
     } catch (error) {
-        console.log(error);
+        console.error(error);
         res.status(500).json({ message: "Server Error" });
     }
 };
 
+
+exports.deleteContractorFake = async (req, res) => {
+    try {
+        const { id } = req.params
+        const contractor = await prisma.contractorNote.update({
+            where: {
+                id: Number(id)
+            },
+            data: {
+                isDelete: true,
+                fakeDelete: true,
+            }
+        })
+        res.json({ message: "Delete contractor success", data: contractor })
+    } catch (error) {
+        console.log(error)
+        res.status(500).json({ message: "Server Error" })
+    }
+}
